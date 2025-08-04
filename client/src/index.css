@@ -91,7 +91,7 @@
 }
 
 .scroll-area ::-webkit-scrollbar-thumb:hover {
-  @apply bg-muted-foreground/50;
+  background-color: hsl(var(--muted-foreground) / 0.5);
 }
 
 /* Ensure proper font rendering */
@@ -126,7 +126,7 @@ select:focus-visible {
 
 /* Text selection styling */
 ::selection {
-  @apply bg-primary/20;
+  background-color: hsl(var(--primary) / 0.2);
 }
 
 /* Improved button hover states */

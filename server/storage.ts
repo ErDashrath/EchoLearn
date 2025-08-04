@@ -50,6 +50,9 @@ export class MemStorage implements IStorage {
     const session: ChatSession = {
       ...insertSession,
       id,
+      userId: insertSession.userId || null,
+      mode: insertSession.mode || "conversation",
+      focus: insertSession.focus || "fluency",
       createdAt: now,
       updatedAt: now,
     };
@@ -81,6 +84,11 @@ export class MemStorage implements IStorage {
     const message: Message = {
       ...insertMessage,
       id,
+      grammarSuggestions: insertMessage.grammarSuggestions ? [...insertMessage.grammarSuggestions] : null,
+      feedback: insertMessage.feedback ? { 
+        ...insertMessage.feedback,
+        type: insertMessage.feedback.type as 'grammar' | 'progress' | 'encouragement'
+      } : null,
       createdAt: new Date(),
     };
     this.messages.set(id, message);

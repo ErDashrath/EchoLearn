@@ -43,7 +43,7 @@ export function MessageBubble({ message, onRegenerate, isRegenerating }: Message
       const highlightedText = (
         <Tooltip key={`suggestion-${startIndex}`}>
           <TooltipTrigger asChild>
-            <span className="underline decoration-yellow-300 dark:decoration-yellow-500 decoration-2 cursor-help bg-yellow-50 dark:bg-yellow-900/30 px-1 rounded">
+            <span className="underline decoration-yellow-300 dark:decoration-yellow-500 decoration-2 cursor-help bg-yellow-50 dark:bg-yellow-900 dark:bg-opacity-30 px-1 rounded">
               {originalText}
             </span>
           </TooltipTrigger>
@@ -72,21 +72,21 @@ export function MessageBubble({ message, onRegenerate, isRegenerating }: Message
         case "grammar":
           return { 
             icon: <Lightbulb className="h-4 w-4" />, 
-            color: "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800",
+            color: "bg-yellow-50 dark:bg-yellow-900 dark:bg-opacity-20 border-yellow-200 dark:border-yellow-800",
             textColor: "text-yellow-800 dark:text-yellow-200",
             subtextColor: "text-yellow-700 dark:text-yellow-300"
           };
         case "progress":
           return { 
             icon: <CheckCircle className="h-4 w-4" />, 
-            color: "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800",
+            color: "bg-emerald-50 dark:bg-emerald-900 dark:bg-opacity-20 border-emerald-200 dark:border-emerald-800",
             textColor: "text-emerald-800 dark:text-emerald-200",
             subtextColor: "text-emerald-700 dark:text-emerald-300"
           };
         default:
           return { 
             icon: <CheckCircle className="h-4 w-4" />, 
-            color: "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800",
+            color: "bg-blue-50 dark:bg-blue-900 dark:bg-opacity-20 border-blue-200 dark:border-blue-800",
             textColor: "text-blue-800 dark:text-blue-200",
             subtextColor: "text-blue-700 dark:text-blue-300"
           };
@@ -121,7 +121,7 @@ export function MessageBubble({ message, onRegenerate, isRegenerating }: Message
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
-        className="mt-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-3"
+        className="mt-3 bg-yellow-50 dark:bg-yellow-900 dark:bg-opacity-20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-3"
       >
         <div className="flex items-start space-x-2">
           <Lightbulb className="h-4 w-4 text-yellow-600 dark:text-yellow-400 mt-0.5" />
