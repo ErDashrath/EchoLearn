@@ -1,0 +1,61 @@
+Design a responsive and minimalistic UI for an AI-powered English learning chatbot (AI Tutor). The app should support voice and text input, give real-time grammar suggestions, and simulate interviews or roleplay.
+
+👤 User Types:
+- Guest (anonymous usage)
+- Logged-in user (optional, future-ready)
+
+🧱 Layout:
+- Fullscreen, single-page responsive layout
+- Sticky top bar: App name/logo, mic toggle, dark/light mode
+- Center: Main chat area
+- Bottom: Input controls and feedback tools
+- Right (optional): Slide-in panel for settings, roles, learning progress
+
+🎨 Theme:
+- Minimalist
+- Clean typography (Inter or DM Sans)
+- Soft shadows, rounded corners (2xl)
+- Muted pastel colors (white, gray-50, blue-100, etc.)
+- Adaptive to light/dark mode
+
+🧠 Core Features:
+- 🔊 Voice input with waveform animation
+- 🧑‍🏫 Roleplay / Interview Mode toggle (dropdown or segmented control)
+- 💬 Real-time transcript display
+- ✍️ On-the-fly grammar suggestion (small tooltip + underline error words)
+- 💡 AI feedback summary after each answer (tiny card appears below message)
+- 📤 Upload or paste prompts (e.g., “Tell me about yourself”)
+- 🕹️ Adjustable speaking speed (slider)
+- 🔁 Regenerate / Retry answer button
+- 🧾 Save/export chat (txt, markdown, or json)
+- 🎯 Toggle for “Fluency Focus” vs “Correction Focus”
+- 🔔 Non-intrusive notification/feedback (toast at corner)
+
+📱 Responsiveness:
+- Mobile-first design
+- On mobile: bottom input bar fixed with floating mic button
+- Chat bubbles use entire width for readability
+- Voice controls slide up as needed
+
+🔁 Optional Components:
+- 📊 Progress Tracker (based on number of corrections over time)
+- 🧩 Side widget: “Try a prompt” (random interview or conversation starters)
+- 🌍 Language selector or accents to simulate regional interviews
+
+💡 Interaction UX:
+- Typing animation for AI response
+- Fade-in cards for feedback
+- Subtle haptic/micro-animation on button press (using Framer Motion)
+- Smooth auto-scroll during conversation
+- Scrollback resume (return to latest message smoothly)
+
+⚠️ Limitations to Avoid (vs typical tools like Duolingo, ChatGPT):
+- Don’t hide user feedback in menus — show it clearly below messages
+- Don’t use cramped text areas — always give comfortable reading space
+- Avoid splitting UI into unrelated panels; keep it centered and cohesive
+- Ensure everything fits cleanly into the viewport (no awkward scrolls or floating components)
+- Enable mic toggle and feedback without page reloads or resets
+
+🏗️ Tech-ready: Vite + Vanilla / React compatible layout
+
+Generate the layout with clean components and utility-based CSS (Tailwind or similar). Make it dev-ready for integration with Ollama (LLM) and Web Speech API (voice).
