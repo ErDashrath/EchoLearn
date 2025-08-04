@@ -52,7 +52,7 @@ export function InputArea({ onSendMessage, disabled, placeholder, onSystemPrompt
   };
 
   return (
-    <div className="bg-white/80 dark:bg-card/80 backdrop-blur-xl border-t border-white/20 dark:border-border/20">
+    <div className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-t border-white/20 dark:border-gray-700/30">
       <div className="max-w-[700px] mx-auto px-6 py-6">
         {/* System Prompt Manager */}
         <AnimatePresence>
@@ -88,7 +88,7 @@ export function InputArea({ onSendMessage, disabled, placeholder, onSystemPrompt
                 onChange={(e) => setMessage(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={placeholder || "Type your message or press the mic button to speak..."}
-                className="min-h-[60px] max-h-[140px] pr-20 resize-none bg-white/90 dark:bg-card/90 backdrop-blur-sm border-white/40 dark:border-border/40 rounded-2xl text-base leading-relaxed shadow-lg hover-lift focus:ring-2 focus:ring-purple-400/50 focus:border-purple-400/50"
+                className="min-h-[60px] max-h-[140px] pr-20 resize-none bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm border-white/40 dark:border-gray-600/40 rounded-2xl text-base leading-relaxed shadow-lg hover-lift focus:ring-2 focus:ring-purple-400/50 focus:border-purple-400/50"
                 disabled={disabled}
               />
               
@@ -125,7 +125,7 @@ export function InputArea({ onSendMessage, disabled, placeholder, onSystemPrompt
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: index * 0.1 }}
                   onClick={() => handleQuickPrompt(prompt)}
-                  className="flex-shrink-0 px-4 py-2 text-sm rounded-2xl bg-white/60 dark:bg-card/60 border border-white/40 dark:border-border/40 backdrop-blur-sm hover:bg-white/80 dark:hover:bg-card/80 hover-lift transition-all shadow-sm"
+                  className="flex-shrink-0 px-4 py-2 text-sm rounded-2xl bg-white/60 dark:bg-gray-700/60 border border-white/40 dark:border-gray-600/40 backdrop-blur-sm hover:bg-white/80 dark:hover:bg-gray-600/80 hover-lift transition-all shadow-sm"
                 >
                   {prompt}
                 </motion.button>

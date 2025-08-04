@@ -43,20 +43,21 @@
   --secondary: hsl(240, 8%, 18%);
   --secondary-foreground: hsl(0, 0%, 98%);
   --muted: hsl(240, 8%, 15%);
-  --muted-foreground: hsl(240, 5%, 64.9%);
+  --muted-foreground: hsl(240, 15%, 65%);
   --accent: hsl(240, 8%, 18%);
   --accent-foreground: hsl(0, 0%, 98%);
-  --destructive: hsl(0, 62.8%, 30.6%);
+  --destructive: hsl(0, 62.8%, 50%);
   --destructive-foreground: hsl(0, 0%, 98%);
   --border: hsl(240, 8%, 22%);
   --input: hsl(240, 8%, 22%);
   --ring: hsl(264, 86%, 70%);
+  --radius: 1rem;
   
   /* Dark mode gradient variables */
-  --gradient-start: hsl(240, 15%, 10%);
-  --gradient-end: hsl(250, 20%, 12%);
-  --user-bubble: hsl(240, 10%, 20%);
-  --ai-bubble: hsl(240, 12%, 16%);
+  --gradient-start: hsl(240, 25%, 8%);
+  --gradient-end: hsl(250, 30%, 12%);
+  --user-bubble: hsl(240, 15%, 18%);
+  --ai-bubble: hsl(240, 15%, 14%);
 }
 
 @layer base {
@@ -142,13 +143,25 @@ select:focus-visible {
 .user-bubble {
   background: var(--user-bubble);
   backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.dark .user-bubble {
+  background: var(--user-bubble);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .ai-bubble {
   background: var(--ai-bubble);
   backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.dark .ai-bubble {
+  background: var(--ai-bubble);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 /* Smooth hover effects */
@@ -171,6 +184,15 @@ select:focus-visible {
   background: linear-gradient(135deg, hsl(264, 86%, 65%) 0%, hsl(280, 86%, 70%) 100%);
   transform: translateY(-1px);
   box-shadow: 0 8px 20px rgba(147, 51, 234, 0.3);
+}
+
+.dark .button-gradient {
+  background: linear-gradient(135deg, hsl(264, 86%, 60%) 0%, hsl(280, 86%, 65%) 100%);
+}
+
+.dark .button-gradient:hover {
+  background: linear-gradient(135deg, hsl(264, 86%, 55%) 0%, hsl(280, 86%, 60%) 100%);
+  box-shadow: 0 8px 20px rgba(147, 51, 234, 0.4);
 }
 
 /* Text selection styling */
