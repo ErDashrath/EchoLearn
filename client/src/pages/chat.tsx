@@ -6,7 +6,7 @@ import { InputArea } from "@/components/chat/InputArea";
 import { SettingsPanel } from "@/components/chat/SettingsPanel";
 import { useChat } from "@/hooks/use-chat";
 import { useTheme } from "@/components/ui/theme-provider";
-import { Bot, Settings, Moon, Sun } from "lucide-react";
+import { Bot, Settings, Moon, Sun, Volume2, VolumeX } from "lucide-react";
 import type { ChatMode, FocusMode } from "@shared/schema";
 
 const MODE_OPTIONS: { value: ChatMode; label: string }[] = [
@@ -28,6 +28,7 @@ export default function ChatPage() {
     messages,
     mode,
     focus,
+    ttsEnabled,
     messagesLoading,
     isSending,
     isRegenerating,
@@ -35,6 +36,7 @@ export default function ChatPage() {
     regenerateMessage,
     updateMode,
     updateFocus,
+    toggleTTS,
     exportSession,
   } = useChat();
 
@@ -60,10 +62,11 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-50 dark:from-gray-950 dark:via-purple-950 dark:to-indigo-950">
+      <div className="max-w-[700px] mx-auto w-full bg-white/40 dark:bg-gray-900/40 backdrop-blur-xl border-x border-white/30 dark:border-gray-700/30 shadow-2xl min-h-screen flex flex-col">
       {/* Header */}
       <header className="sticky top-0 z-40 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-white/20 dark:border-gray-700/30">
-        <div className="max-w-4xl mx-auto flex items-center justify-between px-6 py-4">
+        <div className="flex items-center justify-between px-6 py-4">
           <div className="flex items-center space-x-3">
             <div className="w-9 h-9 bg-gradient-to-br from-purple-500 to-blue-500 rounded-2xl flex items-center justify-center shadow-lg">
               <Bot className="h-5 w-5 text-white" />
@@ -74,6 +77,22 @@ export default function ChatPage() {
           </div>
           
           <div className="flex items-center space-x-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => toggleTTS(!ttsEnabled)}
+              className={`h-10 w-10 rounded-xl hover-lift ${
+                ttsEnabled ? 'text-blue-600 bg-blue-50 dark:bg-blue-900/20' : ''
+              }`}
+              title={ttsEnabled ? "Disable voice output" : "Enable voice output"}
+            >
+              {ttsEnabled ? (
+                <Volume2 className="h-4 w-4" />
+              ) : (
+                <VolumeX className="h-4 w-4" />
+              )}
+            </Button>
+            
             <Button
               variant="ghost"
               size="icon"
@@ -90,7 +109,10 @@ export default function ChatPage() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => setShowSettings(true)}
+              onClick={() => {
+                console.log("Settings button clicked, current showSettings:", showSettings);
+                setShowSettings(true);
+              }}
               className="h-10 w-10 rounded-xl hover-lift"
             >
               <Settings className="h-4 w-4" />
@@ -101,7 +123,7 @@ export default function ChatPage() {
 
       {/* Mode Selector */}
       <div className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-xl border-b border-white/20 dark:border-gray-700/30">
-        <div className="max-w-4xl mx-auto px-6 py-4">
+        <div className="px-6 py-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
             <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">
               <span className="text-sm font-medium text-muted-foreground">Mode:</span>
@@ -172,8 +194,11 @@ export default function ChatPage() {
         onModeChange={handleModeChange}
         onFocusChange={handleFocusChange}
         onExportChat={exportSession}
+        ttsEnabled={ttsEnabled}
+        onTTSToggle={toggleTTS}
         stats={calculateStats()}
       />
+      </div>
     </div>
   );
 }

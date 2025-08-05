@@ -83,7 +83,7 @@ export function ChatArea({ messages, isLoading, onRegenerateMessage, isRegenerat
 
   return (
     <ScrollArea className="flex-1">
-      <div className="max-w-[700px] mx-auto px-6 py-8 space-y-6">
+      <div className="px-6 py-8 space-y-6">
         {/* Welcome message when no messages */}
         {messages.length === 0 && !isLoading && <WelcomeMessage />}
         

@@ -1,11 +1,24 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { openAIService } from "./services/openai";
+import { ollamaService } from "./services/ollama";
 import { insertChatSessionSchema, insertMessageSchema } from "@shared/schema";
 import { z } from "zod";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Health check endpoint for Ollama
+  app.get("/api/ollama/health", async (req, res) => {
+    try {
+      const healthStatus = await ollamaService.healthCheck();
+      res.json(healthStatus);
+    } catch (error) {
+      res.status(500).json({ 
+        error: "Health check failed", 
+        message: error instanceof Error ? error.message : String(error) 
+      });
+    }
+  });
+
   // Chat session routes
   app.post("/api/chat/sessions", async (req, res) => {
     try {
@@ -101,7 +114,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }));
 
       // Generate AI response
-      const aiResponse = await openAIService.generateResponse(
+      const aiResponse = await ollamaService.generateResponse(
         validatedData.content,
         conversationHistory,
         session.mode as any,
@@ -171,7 +184,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }));
 
       // Generate new AI response
-      const aiResponse = await openAIService.regenerateResponse(
+      const aiResponse = await ollamaService.regenerateResponse(
         userMessage.content,
         conversationHistory,
         session.mode as any,

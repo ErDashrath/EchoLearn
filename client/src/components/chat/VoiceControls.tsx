@@ -3,16 +3,19 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useSpeechRecognition } from "@/hooks/use-speech";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
-import { Mic, MicOff } from "lucide-react";
+import { Mic, MicOff, Send, X, RotateCcw } from "lucide-react";
 
 interface VoiceControlsProps {
   onTranscript: (text: string) => void;
   isVisible: boolean;
   onVisibilityChange: (visible: boolean) => void;
+  onTextUpdate?: (text: string) => void; // New prop to update input text
 }
 
-export function VoiceControls({ onTranscript, isVisible, onVisibilityChange }: VoiceControlsProps) {
+export function VoiceControls({ onTranscript, isVisible, onVisibilityChange, onTextUpdate }: VoiceControlsProps) {
   const [speakingSpeed, setSpeakingSpeed] = useState(1);
+  const [currentTranscript, setCurrentTranscript] = useState("");
+  const [lastSpeechTime, setLastSpeechTime] = useState<number>(0);
   
   const {
     isListening,
@@ -22,31 +25,68 @@ export function VoiceControls({ onTranscript, isVisible, onVisibilityChange }: V
     toggleListening,
     resetTranscript,
   } = useSpeechRecognition({
-    continuous: false,
+    continuous: true, // Enable continuous mode for better pause handling
     interimResults: true,
   });
 
-  // Handle transcript completion
+  // Handle transcript completion and track speech activity
   useEffect(() => {
     if (transcript && !isListening) {
-      onTranscript(transcript);
+      setCurrentTranscript(transcript);
       resetTranscript();
     }
-  }, [transcript, isListening, onTranscript, resetTranscript]);
+    
+    // Update last speech time when we get new speech (interim or final)
+    if (transcript || interimTranscript) {
+      setLastSpeechTime(Date.now());
+    }
+  }, [transcript, isListening, interimTranscript, resetTranscript]);
+
+  const handleSendTranscript = () => {
+    if (currentTranscript.trim()) {
+      onTranscript(currentTranscript.trim());
+      setCurrentTranscript("");
+      onVisibilityChange(false);
+    }
+  };
+
+  const handleUseTranscript = () => {
+    if (currentTranscript.trim() && onTextUpdate) {
+      onTextUpdate(currentTranscript.trim());
+      setCurrentTranscript("");
+      onVisibilityChange(false);
+    }
+  };
+
+  const handleRestartRecording = () => {
+    setCurrentTranscript("");
+    resetTranscript();
+    toggleListening();
+  };
+
+  const handleCancel = () => {
+    if (isListening) {
+      toggleListening();
+    }
+    setCurrentTranscript("");
+    resetTranscript();
+    onVisibilityChange(false);
+  };
 
   const handleToggleVoice = () => {
     if (!isSupported) {
       return;
     }
     
-    if (!isListening) {
+    if (!isListening && !currentTranscript) {
       onVisibilityChange(true);
+      setCurrentTranscript("");
+      toggleListening();
+    } else if (isListening) {
       toggleListening();
     } else {
-      toggleListening();
-      setTimeout(() => {
-        onVisibilityChange(false);
-      }, 500);
+      // If we have a transcript but not listening, start over
+      handleRestartRecording();
     }
   };
 
@@ -79,7 +119,11 @@ export function VoiceControls({ onTranscript, isVisible, onVisibilityChange }: V
                 Voice Input {isListening ? "Active" : "Ready"}
               </span>
               <span className="text-xs text-slate-500 dark:text-slate-400">
-                {isListening ? "Listening..." : "Click mic to start"}
+                {isListening ? (
+                  (transcript || interimTranscript) ? 
+                    "Speaking... (2.5s pause to finish)" : 
+                    "Listening..."
+                ) : "Click mic to start"}
               </span>
             </div>
             
@@ -105,12 +149,48 @@ export function VoiceControls({ onTranscript, isVisible, onVisibilityChange }: V
             </div>
             
             {/* Current transcript display */}
-            {(transcript || interimTranscript) && (
+            {(currentTranscript || transcript || interimTranscript) && (
               <div className="bg-white dark:bg-slate-800 rounded-lg p-3 border border-slate-200 dark:border-slate-600">
-                <p className="text-sm text-slate-700 dark:text-slate-300">
-                  <span className="font-medium">{transcript}</span>
+                <p className="text-sm text-slate-700 dark:text-slate-300 min-h-[20px]">
+                  <span className="font-medium">{currentTranscript || transcript}</span>
                   <span className="text-slate-400 italic">{interimTranscript}</span>
                 </p>
+                
+                {/* Action buttons when we have a completed transcript */}
+                {currentTranscript && !isListening && (
+                  <div className="flex items-center space-x-2 mt-3 pt-3 border-t border-slate-200 dark:border-slate-600">
+                    <Button
+                      onClick={handleSendTranscript}
+                      size="sm"
+                      className="flex-1 bg-green-500 hover:bg-green-600"
+                    >
+                      <Send className="h-3 w-3 mr-2" />
+                      Send Now
+                    </Button>
+                    <Button
+                      onClick={handleUseTranscript}
+                      size="sm"
+                      variant="outline"
+                      className="flex-1"
+                    >
+                      Use in Input
+                    </Button>
+                    <Button
+                      onClick={handleRestartRecording}
+                      size="sm"
+                      variant="outline"
+                    >
+                      <RotateCcw className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      onClick={handleCancel}
+                      size="sm"
+                      variant="outline"
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
             
@@ -139,13 +219,22 @@ export function VoiceControls({ onTranscript, isVisible, onVisibilityChange }: V
       
       <Button
         onClick={handleToggleVoice}
-        variant={isListening ? "destructive" : "default"}
+        variant={isListening ? "destructive" : currentTranscript ? "secondary" : "default"}
         size="icon"
         className={`w-12 h-12 rounded-full shadow-lg transition-all duration-200 ${
           isListening 
             ? "bg-red-500 hover:bg-red-600" 
+            : currentTranscript
+            ? "bg-yellow-500 hover:bg-yellow-600"
             : "bg-blue-500 hover:bg-blue-600"
         }`}
+        title={
+          isListening 
+            ? "Stop recording" 
+            : currentTranscript 
+            ? "Record again" 
+            : "Start voice input"
+        }
       >
         {isListening ? (
           <MicOff className="h-5 w-5" />

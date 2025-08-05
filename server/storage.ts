@@ -87,7 +87,8 @@ export class MemStorage implements IStorage {
       grammarSuggestions: insertMessage.grammarSuggestions ? [...insertMessage.grammarSuggestions] : null,
       feedback: insertMessage.feedback ? { 
         ...insertMessage.feedback,
-        type: insertMessage.feedback.type as 'grammar' | 'progress' | 'encouragement'
+        type: insertMessage.feedback.type as 'grammar' | 'progress' | 'encouragement',
+        icon: insertMessage.feedback.icon as string | undefined
       } : null,
       createdAt: new Date(),
     };

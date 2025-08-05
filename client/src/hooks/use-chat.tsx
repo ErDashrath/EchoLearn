@@ -1,8 +1,10 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { getApiUrl } from "@/lib/api-config";
 import type { ChatSession, Message, ChatMode, FocusMode } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
+import { ttsService } from "@/lib/tts-service";
 
 interface ChatMessage extends Message {
   isTyping?: boolean;
@@ -12,6 +14,7 @@ export function useChat(sessionId?: string) {
   const [currentSessionId, setCurrentSessionId] = useState<string | undefined>(sessionId);
   const [mode, setMode] = useState<ChatMode>("conversation");
   const [focus, setFocus] = useState<FocusMode>("fluency");
+  const [ttsEnabled, setTtsEnabled] = useState(ttsService.getEnabled());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   const queryClient = useQueryClient();
@@ -75,6 +78,15 @@ export function useChat(sessionId?: string) {
       queryClient.invalidateQueries({ 
         queryKey: ["/api/chat/sessions", currentSessionId, "messages"] 
       });
+      
+      // Speak the AI response if TTS is enabled
+      if (ttsEnabled && data.aiMessage?.content) {
+        // Add a small delay to ensure the message is displayed first
+        setTimeout(() => {
+          ttsService.speak(data.aiMessage.content);
+        }, 300);
+      }
+      
       scrollToBottom();
     },
     onError: (error) => {
@@ -96,10 +108,18 @@ export function useChat(sessionId?: string) {
       );
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: { aiMessage: Message }) => {
       queryClient.invalidateQueries({ 
         queryKey: ["/api/chat/sessions", currentSessionId, "messages"] 
       });
+      
+      // Speak the regenerated AI response if TTS is enabled
+      if (ttsEnabled && data.aiMessage?.content) {
+        setTimeout(() => {
+          ttsService.speak(data.aiMessage.content);
+        }, 300);
+      }
+      
       toast({
         title: "Response Regenerated",
         description: "Generated a new response for you",
@@ -188,6 +208,15 @@ export function useChat(sessionId?: string) {
     }
   }, [currentSessionId, updateSessionMutation]);
 
+  const toggleTTS = useCallback((enabled: boolean) => {
+    setTtsEnabled(enabled);
+    ttsService.setEnabled(enabled);
+  }, []);
+
+  const speakMessage = useCallback((text: string) => {
+    ttsService.speak(text);
+  }, []);
+
   const switchSession = useCallback((sessionId: string) => {
     setCurrentSessionId(sessionId);
   }, []);
@@ -196,17 +225,21 @@ export function useChat(sessionId?: string) {
     if (!currentSessionId) return;
     
     try {
-      const response = await fetch(`/api/chat/sessions/${currentSessionId}/export/${format}`);
+      const url = getApiUrl(`/api/chat/sessions/${currentSessionId}/export/${format}`);
+      const response = await fetch(url, {
+        credentials: "include",
+        mode: "cors",
+      });
       if (!response.ok) throw new Error('Export failed');
       
       const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
+      const downloadUrl = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url;
+      a.href = downloadUrl;
       a.download = response.headers.get('Content-Disposition')?.split('filename=')[1]?.replace(/"/g, '') || `chat.${format}`;
       document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
+      window.URL.revokeObjectURL(downloadUrl);
       document.body.removeChild(a);
       
       toast({
@@ -235,6 +268,7 @@ export function useChat(sessionId?: string) {
     currentSessionId,
     mode,
     focus,
+    ttsEnabled,
     
     // Loading states
     sessionLoading,
@@ -250,6 +284,8 @@ export function useChat(sessionId?: string) {
     updateFocus,
     switchSession,
     exportSession,
+    toggleTTS,
+    speakMessage,
     
     // Refs
     messagesEndRef,

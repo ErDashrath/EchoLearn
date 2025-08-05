@@ -51,9 +51,13 @@ export function InputArea({ onSendMessage, disabled, placeholder, onSystemPrompt
     setShowVoiceControls(false);
   };
 
+  const handleVoiceTextUpdate = (text: string) => {
+    setMessage(text);
+  };
+
   return (
     <div className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-t border-white/20 dark:border-gray-700/30">
-      <div className="max-w-[700px] mx-auto px-6 py-6">
+      <div className="px-6 py-6">
         {/* System Prompt Manager */}
         <AnimatePresence>
           {showSystemPrompt && (
@@ -75,6 +79,7 @@ export function InputArea({ onSendMessage, disabled, placeholder, onSystemPrompt
         {/* Voice Controls */}
         <VoiceControls
           onTranscript={handleVoiceTranscript}
+          onTextUpdate={handleVoiceTextUpdate}
           isVisible={showVoiceControls}
           onVisibilityChange={setShowVoiceControls}
         />

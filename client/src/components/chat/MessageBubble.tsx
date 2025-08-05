@@ -1,12 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { RotateCcw, Bot, User, Lightbulb, CheckCircle, AlertCircle } from "lucide-react";
+import { RotateCcw, Bot, User, Lightbulb, CheckCircle, AlertCircle, Volume2, VolumeX } from "lucide-react";
 import type { Message, GrammarSuggestion, MessageFeedback } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
+import { ttsService } from "@/lib/tts-service";
 
 interface MessageBubbleProps {
   message: Message;
@@ -17,6 +18,7 @@ interface MessageBubbleProps {
 export function MessageBubble({ message, onRegenerate, isRegenerating }: MessageBubbleProps) {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const isUser = message.role === "user";
   const isAI = message.role === "assistant";
 
@@ -24,6 +26,23 @@ export function MessageBubble({ message, onRegenerate, isRegenerating }: Message
     if (!date) return "";
     return formatDistanceToNow(date, { addSuffix: true });
   };
+
+  const handleSpeak = () => {
+    if (isSpeaking) {
+      ttsService.stop();
+    } else {
+      ttsService.speak(message.content);
+    }
+  };
+
+  // Listen for TTS state changes
+  useEffect(() => {
+    const unsubscribe = ttsService.onSpeakingStateChange(() => {
+      setIsSpeaking(ttsService.isSpeaking());
+    });
+
+    return unsubscribe;
+  }, []);
 
   const renderMessageWithSuggestions = (content: string, suggestions: GrammarSuggestion[]) => {
     if (!suggestions || suggestions.length === 0) {
@@ -196,6 +215,33 @@ export function MessageBubble({ message, onRegenerate, isRegenerating }: Message
           <span className="text-xs text-muted-foreground/80">
             {formatTime(message.createdAt)}
           </span>
+          
+          {/* Speak button for AI messages */}
+          {isAI && (
+            <>
+              <span className="text-xs text-muted-foreground/60">•</span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs h-auto p-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                    onClick={handleSpeak}
+                  >
+                    {isSpeaking ? (
+                      <VolumeX className="h-3 w-3 mr-1" />
+                    ) : (
+                      <Volume2 className="h-3 w-3 mr-1" />
+                    )}
+                    {isSpeaking ? "Stop" : "Speak"}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {isSpeaking ? "Stop speaking" : "Read message aloud"}
+                </TooltipContent>
+              </Tooltip>
+            </>
+          )}
           
           {/* Grammar suggestions toggle for user messages */}
           {isUser && message.grammarSuggestions && message.grammarSuggestions.length > 0 && (

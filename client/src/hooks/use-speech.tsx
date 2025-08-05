@@ -75,6 +75,8 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
   const [error, setError] = useState<string | null>(null);
   
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastResultTimeRef = useRef<number>(0);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -87,7 +89,7 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
         setIsSupported(true);
         const recognition = new SpeechRecognition();
         
-        recognition.continuous = options.continuous ?? true;
+        recognition.continuous = options.continuous ?? true; // Changed back to true for better pause handling
         recognition.interimResults = options.interimResults ?? true;
         recognition.lang = options.lang ?? "en-US";
         recognition.maxAlternatives = 1;
@@ -95,10 +97,16 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
         recognition.onstart = () => {
           setIsListening(true);
           setError(null);
+          lastResultTimeRef.current = Date.now();
         };
 
         recognition.onend = () => {
           setIsListening(false);
+          // Clear any pending silence timer
+          if (silenceTimerRef.current) {
+            clearTimeout(silenceTimerRef.current);
+            silenceTimerRef.current = null;
+          }
         };
 
         recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
@@ -132,6 +140,15 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
           let interimTranscript = "";
           let finalTranscript = "";
 
+          // Update last result time
+          lastResultTimeRef.current = Date.now();
+
+          // Clear any existing silence timer
+          if (silenceTimerRef.current) {
+            clearTimeout(silenceTimerRef.current);
+            silenceTimerRef.current = null;
+          }
+
           for (let i = event.resultIndex; i < event.results.length; i++) {
             const result = event.results[i];
             if (result.isFinal) {
@@ -145,6 +162,22 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
           if (finalTranscript) {
             setTranscript(prev => prev + finalTranscript);
           }
+
+          // Set a timer to stop recognition after 2.5 seconds of silence
+          // Only if we have some content (either final or interim)
+          if ((finalTranscript || interimTranscript) && recognition.continuous) {
+            silenceTimerRef.current = setTimeout(() => {
+              const timeSinceLastResult = Date.now() - lastResultTimeRef.current;
+              // Only stop if it's been more than 2.5 seconds since last speech
+              if (timeSinceLastResult >= 2500 && recognitionRef.current) {
+                try {
+                  recognitionRef.current.stop();
+                } catch (error) {
+                  console.log("Recognition already stopped");
+                }
+              }
+            }, 2500); // 2.5 second delay
+          }
         };
 
         recognitionRef.current = recognition;
@@ -156,6 +189,9 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
     return () => {
       if (recognitionRef.current) {
         recognitionRef.current.stop();
+      }
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
       }
     };
   }, [options.continuous, options.interimResults, options.lang, toast]);
@@ -185,6 +221,11 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
 
   const stopListening = useCallback(() => {
     if (recognitionRef.current && isListening) {
+      // Clear any pending silence timer
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = null;
+      }
       recognitionRef.current.stop();
     }
   }, [isListening]);
