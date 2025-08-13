@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { RotateCcw, Bot, User, Lightbulb, CheckCircle, AlertCircle, Volume2, VolumeX } from "lucide-react";
-import type { Message, GrammarSuggestion, MessageFeedback } from "@shared/schema";
+import type { Message, GrammarSuggestion, MessageFeedback } from "@/types/schema";
 import { formatDistanceToNow } from "date-fns";
 import { ttsService } from "@/lib/tts-service";
 

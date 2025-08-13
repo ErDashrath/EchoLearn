@@ -16,7 +16,7 @@ interface SystemPromptManagerProps {
 }
 
 export function SystemPromptManager({ 
-  defaultPrompt = "You are a helpful AI English tutor. Help users improve their English through conversation, grammar corrections, and personalized feedback.",
+  defaultPrompt = "You are a friendly and helpful AI assistant. Have natural conversations while being helpful, engaging, and supportive. Feel free to ask questions, share insights, and express curiosity. Be conversational and personable.",
   onPromptChange,
   className = ""
 }: SystemPromptManagerProps) {
@@ -102,8 +102,8 @@ export function SystemPromptManager({
                   </TooltipTrigger>
                   <TooltipContent side="top" className="max-w-xs">
                     <p className="text-xs">
-                      System prompts define how the AI behaves. 
-                      Example: "Act like an IELTS speaking coach who focuses on pronunciation."
+                      System prompts define the AI's personality and behavior. 
+                      Example: "Be casual and friendly" or "Act like a curious friend who asks thoughtful questions."
                     </p>
                   </TooltipContent>
                 </Tooltip>
@@ -132,7 +132,7 @@ export function SystemPromptManager({
                   </Label>
                   <Textarea
                     id="custom-prompt-input"
-                    placeholder="e.g., 'Act like an IELTS speaking coach who focuses on pronunciation and fluency.'"
+                    placeholder="e.g., 'You are a casual and friendly AI who loves to chat about anything. Be curious, ask follow-up questions, and share interesting facts or perspectives.'"
                     value={customPrompt}
                     onChange={(e) => setCustomPrompt(e.target.value)}
                     className="min-h-[80px] resize-none text-sm"
