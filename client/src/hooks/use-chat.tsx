@@ -84,7 +84,7 @@ export function useChat(sessionId?: string) {
         description: "Ready to help you learn English!",
       });
     },
-    onError: (error) => {
+    onError: (_error) => {
       toast({
         title: "Error",
         description: "Failed to create new chat session",
@@ -156,7 +156,7 @@ export function useChat(sessionId?: string) {
         description: "Generated a new response for you",
       });
     },
-    onError: (error) => {
+    onError: (_error) => {
       toast({
         title: "Error",
         description: "Failed to regenerate response",
@@ -184,7 +184,7 @@ export function useChat(sessionId?: string) {
         queryKey: ["/api/chat/sessions", currentSessionId] 
       });
     },
-    onError: (error) => {
+    onError: (_error) => {
       toast({
         title: "Error",
         description: "Failed to update session settings",
@@ -227,7 +227,7 @@ export function useChat(sessionId?: string) {
       createSessionMutation.mutate(
         { title: content.slice(0, 50), mode, focus },
         {
-          onSuccess: (newSession) => {
+          onSuccess: (_newSession) => {
             // After session is created, send the message
             setTimeout(() => {
               sendMessageMutation.mutate(content);

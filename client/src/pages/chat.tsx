@@ -11,17 +11,6 @@ import { useTheme } from "@/components/ui/theme-provider";
 import { Bot, Moon, Sun, Volume2, VolumeX } from "lucide-react";
 import type { ChatMode, FocusMode } from "@/types/schema";
 
-const MODE_OPTIONS: { value: ChatMode; label: string }[] = [
-  { value: "conversation", label: "Conversation" },
-  { value: "interview", label: "Interview" },
-  { value: "roleplay", label: "Roleplay" },
-];
-
-const FOCUS_OPTIONS: { value: FocusMode; label: string }[] = [
-  { value: "fluency", label: "Fluency" },
-  { value: "correction", label: "Correction" },
-];
-
 export default function ChatPage() {
   const [showSidebar, setShowSidebar] = useState(false);
   const { theme, toggleTheme } = useTheme();

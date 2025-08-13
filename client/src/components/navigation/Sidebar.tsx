@@ -60,7 +60,7 @@ export function Sidebar({
     grammarImprovements: 0,
     speakingTime: "0 min"
   },
-  selectedModel,
+  selectedModel: _selectedModel,
   onModelSelect
 }: SidebarProps) {
   const [downloadingModel, setDownloadingModel] = useState<string | null>(null);

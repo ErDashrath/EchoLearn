@@ -1,10 +1,8 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { RotateCcw, Bot, User, Lightbulb, CheckCircle, AlertCircle, Volume2, VolumeX } from "lucide-react";
+import { RotateCcw, Bot, User, Lightbulb, CheckCircle, Volume2, VolumeX } from "lucide-react";
 import type { Message, GrammarSuggestion, MessageFeedback } from "@/types/schema";
 import { formatDistanceToNow } from "date-fns";
 import { ttsService } from "@/lib/tts-service";
@@ -22,9 +20,11 @@ export function MessageBubble({ message, onRegenerate, isRegenerating }: Message
   const isUser = message.role === "user";
   const isAI = message.role === "assistant";
 
-  const formatTime = (date: Date | null) => {
+  const formatTime = (date: string | Date | null | undefined) => {
     if (!date) return "";
-    return formatDistanceToNow(date, { addSuffix: true });
+    const parsedDate = typeof date === "string" ? new Date(date) : date;
+    if (!parsedDate || isNaN(parsedDate.getTime())) return "";
+    return formatDistanceToNow(parsedDate, { addSuffix: true });
   };
 
   const handleSpeak = () => {
@@ -49,40 +49,8 @@ export function MessageBubble({ message, onRegenerate, isRegenerating }: Message
       return content;
     }
 
-    let result = content;
-    let offset = 0;
-
-    // Sort suggestions by start index to process them in order
-    const sortedSuggestions = [...suggestions].sort((a, b) => a.startIndex - b.startIndex);
-
-    sortedSuggestions.forEach((suggestion) => {
-      const startIndex = suggestion.startIndex + offset;
-      const endIndex = suggestion.endIndex + offset;
-      const originalText = result.slice(startIndex, endIndex);
-      
-      const highlightedText = (
-        <Tooltip key={`suggestion-${startIndex}`}>
-          <TooltipTrigger asChild>
-            <span className="underline decoration-yellow-300 dark:decoration-yellow-500 decoration-2 cursor-help bg-yellow-50 dark:bg-yellow-900 dark:bg-opacity-30 px-1 rounded">
-              {originalText}
-            </span>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="max-w-xs">
-            <div className="space-y-1">
-              <p className="font-medium">Suggestion: {suggestion.suggestion}</p>
-              <p className="text-xs text-muted-foreground">{suggestion.reason}</p>
-            </div>
-          </TooltipContent>
-        </Tooltip>
-      );
-
-      // This is a simplified approach - in a real implementation, you'd need
-      // a more sophisticated text highlighting system
-      result = result.slice(0, startIndex) + `__HIGHLIGHT_${startIndex}__` + result.slice(endIndex);
-      offset += `__HIGHLIGHT_${startIndex}__`.length - (endIndex - startIndex);
-    });
-
     // For now, just return the original content with grammar suggestions shown separately
+    // TODO: Implement proper text highlighting system for inline suggestions
     return content;
   };
 
