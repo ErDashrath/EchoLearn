@@ -78,19 +78,24 @@ export function Sidebar({
       try {
         const cached = await webllmService.getCachedModelsAsync();
         setCachedModels(cached);
-        const active = webllmService.getActiveModel();
-        setActiveModel(active);
+        
+        // Only update active model if it's not currently null (deactivated)
+        const currentActive = webllmService.getActiveModel();
+        setActiveModel(currentActive);
       } catch (error) {
         console.error('Error updating models:', error);
         const cached = webllmService.getCachedModels();
         setCachedModels(cached);
-        const active = webllmService.getActiveModel();
-        setActiveModel(active);
+        
+        // Fallback with same logic - respect deactivated state
+        const currentActive = webllmService.getActiveModel();
+        setActiveModel(currentActive);
       }
     };
 
     updateModels();
-    const interval = setInterval(updateModels, 2000);
+    // Reduce frequency to avoid conflicts with user actions
+    const interval = setInterval(updateModels, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -122,7 +127,7 @@ export function Sidebar({
   const handleModelSelect = async (modelId: string) => {
     if (activeModel === modelId) {
       // Deactivate current model
-      webllmService.setActiveModel(null);
+      await webllmService.deactivateModel();
       setActiveModel(null);
       return;
     }

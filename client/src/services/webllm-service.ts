@@ -95,6 +95,17 @@ class WebLLMService {
   constructor() {
     // Test if we have any cached models on initialization
     this.checkInitialCache();
+    
+    // Restore active model from localStorage
+    this.restoreActiveModel();
+  }
+
+  private restoreActiveModel() {
+    const storedActive = localStorage.getItem('webllm-active-model');
+    if (storedActive) {
+      console.log('Restoring active model from localStorage:', storedActive);
+      this.activeModel = storedActive;
+    }
   }
 
   private async checkInitialCache() {
@@ -187,12 +198,41 @@ class WebLLMService {
   }
 
   getActiveModel(): string | null {
-    return this.activeModel;
+    // Check memory first, then localStorage as fallback
+    if (this.activeModel !== null) {
+      return this.activeModel;
+    }
+    
+    // Fallback to localStorage
+    const stored = localStorage.getItem('webllm-active-model');
+    if (stored && this.isModelCached(stored)) {
+      this.activeModel = stored;
+      return stored;
+    }
+    
+    return null;
   }
 
   setActiveModel(modelId: string | null): void {
     this.activeModel = modelId;
     console.log('Active model set to:', modelId);
+    
+    // Persist the active model state in localStorage
+    if (modelId) {
+      localStorage.setItem('webllm-active-model', modelId);
+    } else {
+      localStorage.removeItem('webllm-active-model');
+    }
+  }
+
+  async deactivateModel(): Promise<void> {
+    console.log('Deactivating current model...');
+    this.activeModel = null;
+    localStorage.removeItem('webllm-active-model');
+    
+    // Don't unload the engine, just mark as inactive
+    // This keeps the model in memory but marks it as not actively selected
+    console.log('Model deactivated successfully');
   }
 
   isModelLoaded(): boolean {
