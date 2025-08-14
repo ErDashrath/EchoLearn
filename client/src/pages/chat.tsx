@@ -67,7 +67,7 @@ export default function ChatPage() {
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col">
       {/* Header with Hamburger Menu */}
-      <header className="flex items-center justify-between p-4 border-b border-gray-800">
+      <header className={`flex items-center justify-between p-4 border-b border-gray-800 transition-all duration-300 ${showSidebar ? 'ml-80' : ''}`}>
         <div className="flex items-center space-x-4">
           <HamburgerMenu onClick={toggleSidebar} isOpen={showSidebar} />
           <div className="flex items-center space-x-2">
@@ -111,7 +111,7 @@ export default function ChatPage() {
       </header>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col">
+      <div className={`flex-1 flex flex-col transition-all duration-300 ${showSidebar ? 'ml-80' : ''}`}>
         {messages.length === 0 ? (
           /* Welcome Screen */
           <div className="flex-1 flex flex-col items-center justify-center px-6 max-w-3xl mx-auto w-full">

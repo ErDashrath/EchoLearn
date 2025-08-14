@@ -150,16 +150,7 @@ export function Sidebar({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[60] flex">
-          {/* Backdrop - Only covers sidebar area */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute left-0 top-0 w-80 h-full bg-black/20 backdrop-blur-sm"
-            onClick={onClose}
-          />
-          
+        <div className="fixed left-0 top-0 z-[60] h-full w-80">
           {/* Sidebar */}
           <motion.div
             initial={{ x: "-100%" }}
@@ -167,6 +158,7 @@ export function Sidebar({
             exit={{ x: "-100%" }}
             transition={{ type: "spring", damping: 20 }}
             className="relative w-80 bg-gray-900 shadow-2xl border-r border-gray-800 flex flex-col h-full z-10"
+            style={{ boxShadow: '2px 0 15px rgba(0, 0, 0, 0.2)' }}
           >
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-800">
