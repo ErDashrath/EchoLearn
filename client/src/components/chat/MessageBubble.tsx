@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { RotateCcw, Bot, User, Lightbulb, CheckCircle, Volume2, VolumeX, Copy, Check } from "lucide-react";
 import type { Message, GrammarSuggestion, MessageFeedback } from "@/types/schema";
 import { formatDistanceToNow } from "date-fns";
@@ -181,9 +182,16 @@ export function MessageBubble({ message, onRegenerate, isRegenerating }: Message
               : "ai-bubble rounded-3xl rounded-tl-lg"
           }`}
         >
-          <p className={`leading-relaxed ${isUser ? "text-gray-800 dark:text-gray-100" : "text-foreground"}`}>
-            {renderMessageWithSuggestions(message.content, message.grammarSuggestions || [])}
-          </p>
+          {isAI ? (
+            <MarkdownRenderer 
+              content={message.content} 
+              className="text-foreground"
+            />
+          ) : (
+            <p className="leading-relaxed text-gray-800 dark:text-gray-100">
+              {renderMessageWithSuggestions(message.content, message.grammarSuggestions || [])}
+            </p>
+          )}
         </div>
 
         <div className={`flex flex-wrap items-center mt-3 space-x-2 px-2 ${isUser ? "justify-end" : ""}`}>
