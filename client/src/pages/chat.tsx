@@ -1,18 +1,20 @@
 import { useState } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { ChatArea } from "@/components/chat/ChatArea";
 import { InputArea } from "@/components/chat/InputArea";
 import { Sidebar } from "@/components/navigation/Sidebar";
 import { HamburgerMenu } from "@/components/navigation/HamburgerMenu";
 import { ModelSelector } from "@/components/navigation/ModelSelector";
+import { SystemPromptManager } from "@/components/chat/SystemPromptManager";
 import { useChat } from "@/hooks/use-chat";
 import { useTheme } from "@/components/ui/theme-provider";
-import { Bot, Moon, Sun, Volume2, VolumeX } from "lucide-react";
+import { Bot, Moon, Sun, Volume2, VolumeX, Settings } from "lucide-react";
 import type { ChatMode, FocusMode } from "@/types/schema";
 
 export default function ChatPage() {
   const [showSidebar, setShowSidebar] = useState(false);
+  const [showSystemPrompt, setShowSystemPrompt] = useState(false);
   const { theme, toggleTheme } = useTheme();
   
   const {
@@ -91,6 +93,17 @@ export default function ChatPage() {
           <Button
             variant="ghost"
             size="icon"
+            onClick={() => setShowSystemPrompt(!showSystemPrompt)}
+            className={`h-10 w-10 rounded-lg hover:bg-gray-800 ${
+              showSystemPrompt ? 'text-blue-400 bg-blue-900/20' : 'text-gray-400'
+            }`}
+          >
+            <Settings className="h-4 w-4" />
+          </Button>
+          
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => toggleTTS(!ttsEnabled)}
             className={`h-10 w-10 rounded-lg hover:bg-gray-800 ${
               ttsEnabled ? 'text-blue-400 bg-blue-900/20' : 'text-gray-400'
@@ -109,6 +122,33 @@ export default function ChatPage() {
           </Button>
         </div>
       </header>
+
+      {/* System Prompt Modal */}
+      <AnimatePresence>
+        {showSystemPrompt && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+            onClick={() => setShowSystemPrompt(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-lg"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <SystemPromptManager
+                onPromptChange={(prompt, isEnabled) => {
+                  console.log("System prompt updated:", { prompt, isEnabled });
+                }}
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Main Content Area */}
       <div className={`flex-1 flex flex-col transition-all duration-300 ${showSidebar ? 'ml-80' : ''}`}>
@@ -135,9 +175,6 @@ export default function ChatPage() {
                   onSendMessage={sendMessage}
                   disabled={isSending || messagesLoading}
                   placeholder="Ask your English tutor anything..."
-                  onSystemPromptChange={(prompt, isEnabled) => {
-                    console.log("System prompt updated:", { prompt, isEnabled });
-                  }}
                   isWelcomeScreen={true}
                 />
               </div>
@@ -191,9 +228,6 @@ export default function ChatPage() {
                 onSendMessage={sendMessage}
                 disabled={isSending || messagesLoading}
                 placeholder="Continue the conversation..."
-                onSystemPromptChange={(prompt, isEnabled) => {
-                  console.log("System prompt updated:", { prompt, isEnabled });
-                }}
                 isWelcomeScreen={false}
               />
             </div>

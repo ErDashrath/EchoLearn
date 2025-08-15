@@ -1,15 +1,13 @@
 import { useState, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { VoiceControls } from "./VoiceControls";
-import { SystemPromptManager } from "./SystemPromptManager";
-import { Send, Paperclip, Settings, Mic, MicOff } from "lucide-react";
+import { Send, Paperclip, Mic, MicOff } from "lucide-react";
 
 interface InputAreaProps {
   onSendMessage: (message: string) => void;
   disabled?: boolean;
   placeholder?: string;
-  onSystemPromptChange?: (prompt: string, isEnabled: boolean) => void;
   isWelcomeScreen?: boolean;
 }
 
@@ -17,12 +15,10 @@ export function InputArea({
   onSendMessage, 
   disabled, 
   placeholder = "Ask your English tutor anything...", 
-  onSystemPromptChange,
   isWelcomeScreen = false 
 }: InputAreaProps) {
   const [message, setMessage] = useState("");
   const [showVoiceControls, setShowVoiceControls] = useState(false);  
-  const [showSystemPrompt, setShowSystemPrompt] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -111,15 +107,6 @@ export function InputArea({
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => setShowSystemPrompt(!showSystemPrompt)}
-                className="text-gray-400 hover:text-white hover:bg-gray-700 rounded-full"
-              >
-                <Settings className="h-5 w-5" />
-              </Button>
-              
-              <Button
-                variant="ghost"
-                size="icon"
                 className="text-gray-400 hover:text-white hover:bg-gray-700 rounded-full"
               >
                 <Paperclip className="h-5 w-5" />
@@ -146,22 +133,6 @@ export function InputArea({
             if (!visible) setIsListening(false);
           }}
         />
-
-        {/* System Prompt */}
-        <AnimatePresence>
-          {showSystemPrompt && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-              className="mt-4"
-            >
-              <SystemPromptManager
-                onPromptChange={onSystemPromptChange}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
     );
   }
@@ -215,22 +186,6 @@ export function InputArea({
           if (!visible) setIsListening(false);
         }}
       />
-
-      {/* System Prompt */}
-      <AnimatePresence>
-        {showSystemPrompt && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 10 }}
-            className="absolute bottom-full mb-2 left-0 right-0"
-          >
-            <SystemPromptManager
-              onPromptChange={onSystemPromptChange}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }
