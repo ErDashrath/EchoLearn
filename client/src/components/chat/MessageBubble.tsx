@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { RotateCcw, Bot, User, Lightbulb, CheckCircle, Volume2, VolumeX } from "lucide-react";
+import { RotateCcw, Bot, User, Lightbulb, CheckCircle, Volume2, VolumeX, Copy, Check } from "lucide-react";
 import type { Message, GrammarSuggestion, MessageFeedback } from "@/types/schema";
 import { formatDistanceToNow } from "date-fns";
 import { ttsService } from "@/lib/tts-service";
@@ -17,6 +17,7 @@ export function MessageBubble({ message, onRegenerate, isRegenerating }: Message
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isCopied, setIsCopied] = useState(false);
   const isUser = message.role === "user";
   const isAI = message.role === "assistant";
 
@@ -32,6 +33,16 @@ export function MessageBubble({ message, onRegenerate, isRegenerating }: Message
       ttsService.stop();
     } else {
       ttsService.speak(message.content);
+    }
+  };
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(message.content);
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 2000); // Reset after 2 seconds
+    } catch (error) {
+      console.error('Failed to copy text:', error);
     }
   };
 
@@ -183,6 +194,29 @@ export function MessageBubble({ message, onRegenerate, isRegenerating }: Message
           <span className="text-xs text-muted-foreground/80">
             {formatTime(message.createdAt)}
           </span>
+          
+          {/* Copy button for all messages */}
+          <span className="text-xs text-muted-foreground/60">•</span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs h-auto p-1 text-gray-600 hover:text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                onClick={handleCopy}
+              >
+                {isCopied ? (
+                  <Check className="h-3 w-3 mr-1 text-green-600" />
+                ) : (
+                  <Copy className="h-3 w-3 mr-1" />
+                )}
+                {isCopied ? "Copied!" : "Copy"}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {isCopied ? "Text copied to clipboard" : "Copy message text"}
+            </TooltipContent>
+          </Tooltip>
           
           {/* Speak button for AI messages */}
           {isAI && (
