@@ -15,7 +15,6 @@ interface VoiceControlsProps {
 export function VoiceControls({ onTranscript, isVisible, onVisibilityChange, onTextUpdate }: VoiceControlsProps) {
   const [speakingSpeed, setSpeakingSpeed] = useState(1);
   const [currentTranscript, setCurrentTranscript] = useState("");
-  const [lastSpeechTime, setLastSpeechTime] = useState<number>(0);
   
   const {
     isListening,
@@ -36,9 +35,10 @@ export function VoiceControls({ onTranscript, isVisible, onVisibilityChange, onT
       resetTranscript();
     }
     
-    // Update last speech time when we get new speech (interim or final)
-    if (transcript || interimTranscript) {
-      setLastSpeechTime(Date.now());
+    // Reset transcript after sending
+    if (!isListening && transcript && !interimTranscript) {
+      setCurrentTranscript(transcript);
+      resetTranscript();
     }
   }, [transcript, isListening, interimTranscript, resetTranscript]);
 

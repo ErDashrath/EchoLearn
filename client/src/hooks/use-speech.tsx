@@ -310,7 +310,7 @@ export function useTextToSpeech() {
       setIsSpeaking(false);
     };
 
-    utterance.onerror = (event) => {
+    utterance.onerror = (_event) => {
       setIsSpeaking(false);
       toast({
         title: "Speech Error",

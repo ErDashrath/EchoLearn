@@ -141,7 +141,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
           ),
           
           // Code blocks and inline code
-          code: ({ children, className, ...props }) => {
+          code: ({ children, className }) => {
             const inline = !className;
             return (
               <CodeBlock
