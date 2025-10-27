@@ -232,7 +232,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         case 'md':
           exportData = messages
-            .map(msg => `## ${msg.role === 'user' ? 'You' : 'AI Tutor'}\n\n${msg.content}`)
+            .map(msg => `## ${msg.role === 'user' ? 'You' : 'Your Therapist'}\n\n${msg.content}`)
             .join('\n\n');
           contentType = 'text/markdown';
           filename = `chat-${sessionId}.md`;

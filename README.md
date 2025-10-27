@@ -1,6 +1,6 @@
-# EchoLearn: Local AI-Powered Chat Platform
+# Mindscribe: Local AI-Powered Chat Platform
 
-![Project Banner](https://placehold.co/1200x400/1E90FF/FFFFFF?text=EchoLearn%0ALocal%20AI%20Chat%20Platform)
+![Project Banner](https://placehold.co/1200x400/1E90FF/FFFFFF?text=Mindscribe%0ALocal%20AI%20Chat%20Platform)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)
@@ -11,7 +11,7 @@
 
 A modern, privacy-first chat platform that runs AI models directly in your browser. No servers, no API keys, no data collection - just pure local AI inference powered by WebLLM technology.
 
-## 🌟 What Makes EchoLearn Special
+## 🌟 What Makes Mindscribe Special
 
 - **🔒 100% Private:** All AI processing happens in your browser - no data leaves your device
 - **🚀 Browser-Native AI:** Advanced language models running with WebGPU acceleration
@@ -44,7 +44,7 @@ A modern, privacy-first chat platform that runs AI models directly in your brows
 ## 🏗️ Architecture
 
 ```
-EchoLearn/
+Mindscribe/
 ├── client/                 # React frontend application
 │   ├── src/
 │   │   ├── components/     # Reusable UI components
@@ -72,7 +72,7 @@ EchoLearn/
 
 ### Option 1: Deploy to Vercel (Recommended)
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/ErDashrath/EchoLearn)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/ErDashrath/Mindscribe)
 
 1. Click the deploy button above
 2. Fork the repository to your GitHub
@@ -83,8 +83,8 @@ EchoLearn/
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/ErDashrath/EchoLearn.git
-   cd EchoLearn/client
+   git clone https://github.com/ErDashrath/Mindscribe.git
+   cd Mindscribe/client
    ```
 
 2. **Install dependencies:**
@@ -300,6 +300,6 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE) for detai
 
 **Built with ❤️ by [Dashrath](https://github.com/ErDashrath)**
 
-[⭐ Star this repo](https://github.com/ErDashrath/EchoLearn) | [🐛 Report Bug](https://github.com/ErDashrath/EchoLearn/issues) | [💡 Request Feature](https://github.com/ErDashrath/EchoLearn/issues)
+[⭐ Star this repo](https://github.com/ErDashrath/Mindscribe) | [🐛 Report Bug](https://github.com/ErDashrath/Mindscribe/issues) | [💡 Request Feature](https://github.com/ErDashrath/Mindscribe/issues)
 
 </div>

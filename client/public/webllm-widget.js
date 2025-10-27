@@ -1,5 +1,5 @@
 /**
- * WebLLM Widget - Non-intrusive AI chat overlay for EchoLearn
+ * WebLLM Widget - Non-intrusive AI chat overlay for Mindscribe
  * Independent implementation that preserves existing functionality
  */
 

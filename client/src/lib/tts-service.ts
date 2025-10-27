@@ -1,4 +1,4 @@
-// Text-to-Speech utility for EchoLearn
+// Text-to-Speech utility for Mindscribe
 export class TTSService {
   private isEnabled: boolean = false;
   private synthesis: SpeechSynthesis;
@@ -9,7 +9,7 @@ export class TTSService {
     this.synthesis = window.speechSynthesis;
     
     // Load TTS preference from localStorage
-    const savedPreference = localStorage.getItem('echolearn-tts-enabled');
+    const savedPreference = localStorage.getItem('mindscribe-tts-enabled');
     this.isEnabled = savedPreference === 'true';
   }
 
@@ -68,7 +68,7 @@ export class TTSService {
    */
   setEnabled(enabled: boolean): void {
     this.isEnabled = enabled;
-    localStorage.setItem('echolearn-tts-enabled', enabled.toString());
+        localStorage.setItem('mindscribe-tts-enabled', enabled.toString());
     
     // Stop speaking when disabled
     if (!enabled) {

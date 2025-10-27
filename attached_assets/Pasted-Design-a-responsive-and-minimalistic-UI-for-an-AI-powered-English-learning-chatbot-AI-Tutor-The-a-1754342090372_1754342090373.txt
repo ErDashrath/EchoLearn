@@ -1,4 +1,4 @@
-Design a responsive and minimalistic UI for an AI-powered English learning chatbot (AI Tutor). The app should support voice and text input, give real-time grammar suggestions, and simulate interviews or roleplay.
+Design a responsive and minimalistic UI for an AI-powered English learning chatbot (Your Therapist). The app should support voice and text input, give real-time grammar suggestions, and simulate interviews or roleplay.
 
 👤 User Types:
 - Guest (anonymous usage)

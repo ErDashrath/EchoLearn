@@ -1,4 +1,4 @@
-# EchoLearn - Ollama Integration Summary
+# Mindscribe - Ollama Integration Summary
 
 ## 🔄 Changes Made
 
@@ -147,4 +147,4 @@ curl -X POST http://localhost:5000/api/chat/sessions -H "Content-Type: applicati
 4. **Check grammar analysis** functionality
 5. **Validate export features** work as expected
 
-Your EchoLearn application is now fully configured to work with your remote Ollama server via Cloudflare tunnel, with automatic fallback to localhost for development!
+Your Mindscribe application is now fully configured to work with your remote Ollama server via Cloudflare tunnel, with automatic fallback to localhost for development!

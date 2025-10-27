@@ -32,7 +32,7 @@ export class OllamaService {
         method: 'GET',
         headers: { 
           'Accept': 'application/json',
-          'User-Agent': 'EchoLearn/1.0'
+          'User-Agent': 'Mindscribe/1.0'
         },
         mode: this.baseUrl.includes('localhost') ? 'same-origin' : 'cors',
       });
@@ -69,7 +69,7 @@ export class OllamaService {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "User-Agent": "EchoLearn/1.0",
+          "User-Agent": "Mindscribe/1.0",
           "Accept": "application/json",
         },
         body: JSON.stringify(body),

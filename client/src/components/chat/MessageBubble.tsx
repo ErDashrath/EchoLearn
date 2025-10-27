@@ -196,7 +196,7 @@ export function MessageBubble({ message, onRegenerate, isRegenerating }: Message
 
         <div className={`flex flex-wrap items-center mt-3 space-x-2 px-2 ${isUser ? "justify-end" : ""}`}>
           <span className="text-xs font-medium text-muted-foreground">
-            {isUser ? "You" : "AI Tutor"}
+            {isUser ? "You" : "Your Therapist"}
           </span>
           <span className="text-xs text-muted-foreground/60">•</span>
           <span className="text-xs text-muted-foreground/80">

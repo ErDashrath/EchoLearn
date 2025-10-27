@@ -1,8 +1,8 @@
-# WebLLM Integration in EchoLearn
+# WebLLM Integration in Mindscribe
 
 ## Overview
 
-WebLLM has been **seamlessly integrated** into your main EchoLearn chat interface. Instead of a separate overlay, it now works directly within your existing English tutoring application, providing a unified experience.
+WebLLM has been **seamlessly integrated** into your main Mindscribe chat interface. Instead of a separate overlay, it now works directly within your existing English tutoring application, providing a unified experience.
 
 ## 🎯 Key Features
 
@@ -189,7 +189,7 @@ User Message → Chat Interface → [WebLLM Enabled?]
 
 ## 🎊 **You're All Set!**
 
-Your EchoLearn now has **dual AI capabilities**:
+Your Mindscribe now has **dual AI capabilities**:
 - **🌐 Ollama**: Server-based English tutoring (existing)
 - **💻 WebLLM**: Local AI models (new!)
 

@@ -19,7 +19,7 @@ export default function TestPage() {
         boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)" 
       }}>
         <h1 style={{ fontSize: "1.5rem", fontWeight: "bold", marginBottom: "1rem" }}>
-          EchoLearn Test Page
+                    Mindscribe Test Page
         </h1>
         <p style={{ marginBottom: "1rem" }}>Count: {count}</p>
         <button 

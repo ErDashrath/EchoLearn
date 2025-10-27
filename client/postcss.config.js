@@ -1,4 +1,4 @@
-// PostCSS configuration for EchoLearn client
+// PostCSS configuration for Mindscribe client
 export default {
   plugins: {
     tailwindcss: {},

@@ -1,6 +1,6 @@
 # Markdown Formatting Test
 
-Welcome to **EchoLearn**! This is a test of our *enhanced* markdown formatting capabilities.
+Welcome to **Mindscribe**! This is a test of our *enhanced* markdown formatting capabilities.
 
 ## Features
 
@@ -19,7 +19,7 @@ Here's a JavaScript example:
 
 ```javascript
 function greetLearner(name) {
-  console.log(`Hello, ${name}! Welcome to EchoLearn.`);
+  console.log(`Hello, ${name}! Welcome to Mindscribe.`);
   
   // AI-powered English learning
   const suggestions = analyzeGrammar(name);

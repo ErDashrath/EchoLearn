@@ -32,7 +32,7 @@ const WelcomeMessage = () => (
         </p>
       </div>
       <div className="flex items-center space-x-2 mt-3 px-2">
-        <span className="text-xs font-medium text-muted-foreground">AI Tutor</span>
+        <span className="text-xs font-medium text-muted-foreground">Your Therapist</span>
         <span className="text-xs text-muted-foreground/60">•</span>
         <span className="text-xs text-muted-foreground/80">Just now</span>
       </div>

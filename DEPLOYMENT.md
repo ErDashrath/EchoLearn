@@ -1,4 +1,4 @@
-# EchoLearn - AI English Tutor
+# Mindscribe - AI English Tutor
 
 A modern React application built with TypeScript, Vite, and WebLLM for running AI language models locally in the browser.
 
@@ -58,7 +58,7 @@ npm run build
 ```bash
 # Clone the repository
 git clone <your-repo-url>
-cd EchoLearn
+cd Mindscribe
 
 # Navigate to client directory
 cd client

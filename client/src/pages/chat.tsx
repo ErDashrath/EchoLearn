@@ -76,8 +76,8 @@ export default function ChatPage() {
             <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
               <Bot className="h-4 w-4 text-white" />
             </div>
-            <span className="font-semibold text-lg">EchoLearn</span>
-            <span className="text-sm text-gray-400 bg-gray-800 px-2 py-1 rounded">AI Tutor</span>
+            <span className="font-semibold text-lg">Mindscribe</span>
+            <span className="text-sm text-gray-400 bg-gray-800 px-2 py-1 rounded">Your Personal Therapist</span>
           </div>
         </div>
         
@@ -164,7 +164,7 @@ export default function ChatPage() {
                 Hello, Dashrath
               </h1>
               <p className="text-gray-400 text-lg">
-                Ready to practice English with your AI tutor?
+                How are you feeling today? I'm here to listen, understand, and support you through anything.
               </p>
             </motion.div>
 
@@ -174,7 +174,7 @@ export default function ChatPage() {
                 <InputArea
                   onSendMessage={sendMessage}
                   disabled={isSending || messagesLoading}
-                  placeholder="Ask your English tutor anything..."
+                  placeholder="Share what's on your mind... I'm here to listen."
                   isWelcomeScreen={true}
                 />
               </div>
@@ -184,30 +184,30 @@ export default function ChatPage() {
                 <Button
                   variant="outline"
                   className="bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700 hover:text-white"
-                  onClick={() => sendMessage("Help me practice conversation")}
+                  onClick={() => sendMessage("I'm feeling anxious and need someone to talk to")}
                 >
-                  Practice Conversation
+                  Feeling Anxious
                 </Button>
                 <Button
                   variant="outline"
                   className="bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700 hover:text-white"
-                  onClick={() => sendMessage("Check my grammar")}
+                  onClick={() => sendMessage("I'm dealing with stress and need coping strategies")}
                 >
-                  Grammar Check
+                  Managing Stress
                 </Button>
                 <Button
                   variant="outline"
                   className="bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700 hover:text-white"
-                  onClick={() => sendMessage("Start an interview practice")}
+                  onClick={() => sendMessage("I need help processing my emotions today")}
                 >
-                  Interview Practice
+                  Process Emotions
                 </Button>
                 <Button
                   variant="outline"
                   className="bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700 hover:text-white"
-                  onClick={() => sendMessage("Help me with pronunciation")}
+                  onClick={() => sendMessage("I want to talk about my relationships and get advice")}
                 >
-                  Pronunciation Help
+                  Relationship Support
                 </Button>
               </div>
             </div>
