@@ -6,16 +6,18 @@ import { InputArea } from "@/components/chat/InputArea";
 import { Sidebar } from "@/components/navigation/Sidebar";
 import { HamburgerMenu } from "@/components/navigation/HamburgerMenu";
 import { ModelSelector } from "@/components/navigation/ModelSelector";
+import { ModelDownloadPanel } from "@/components/chat/ModelDownloadPanel";
 import { useChat } from "@/hooks/use-chat";
 import { useChatSession } from "@/hooks/use-chat-session";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/components/ui/theme-provider";
-import { Bot, Moon, Sun, Volume2, VolumeX, Brain } from "lucide-react";
+import { Bot, Moon, Sun, Volume2, VolumeX, Brain, Download } from "lucide-react";
 import type { ChatMode, FocusMode } from "@/types/schema";
 import type { DASS21Results } from "@/services/mental-health-prompt-service";
 
 export default function ChatPage() {
   const [showSidebar, setShowSidebar] = useState(false);
+  const [showModelPanel, setShowModelPanel] = useState(false);
   const [dass21Results, setDass21Results] = useState<DASS21Results | null>(null);
   // System prompt state
   const [customSystemPrompt, setCustomSystemPrompt] = useState("");
@@ -82,6 +84,14 @@ export default function ChatPage() {
 
   const closeSidebar = () => {
     setShowSidebar(false);
+  };
+
+  const toggleModelPanel = () => {
+    setShowModelPanel(!showModelPanel);
+  };
+
+  const closeModelPanel = () => {
+    setShowModelPanel(false);
   };
 
   const calculateStats = () => {
@@ -154,12 +164,23 @@ export default function ChatPage() {
         </div>
         
         <div className="flex items-center space-x-2">
-          {/* Model Selector */}
+          {/* Model Download Button - Opens Right Panel */}
+          <Button
+            variant="ghost"
+            onClick={toggleModelPanel}
+            className="flex items-center space-x-2 h-10 px-4 rounded-lg bg-gradient-to-r from-purple-600/30 to-blue-600/30 hover:from-purple-600/40 hover:to-blue-600/40 text-purple-300 hover:text-white border border-purple-500/40 transition-all"
+            title="Download AI Models"
+          >
+            <Brain className="h-4 w-4" />
+            <span className="text-sm font-medium">Download Model</span>
+          </Button>
+          
+          {/* Model Selector - Shows current model */}
           <ModelSelector
             selectedModel={selectedModel || "llama-3.2-3b"}
             onModelSelect={selectWebLLMModel}
             isLoading={isWebllmGenerating}
-            onOpenSidebar={toggleSidebar}
+            onOpenSidebar={toggleModelPanel}
           />
           
           <Button
@@ -316,6 +337,14 @@ export default function ChatPage() {
         customSystemPrompt={customSystemPrompt}
         isCustomPromptEnabled={isCustomPromptEnabled}
         onSystemPromptChange={handleSystemPromptChange}
+      />
+
+      {/* Model Download Panel (Right Side) */}
+      <ModelDownloadPanel
+        isOpen={showModelPanel}
+        onClose={closeModelPanel}
+        selectedModel={selectedModel || undefined}
+        onModelSelect={selectWebLLMModel}
       />
     </div>
   );

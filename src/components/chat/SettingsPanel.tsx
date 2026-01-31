@@ -206,156 +206,136 @@ export function SettingsPanel({
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
-                    Local AI Models
+                    🤖 Local AI Models
                     <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-2 py-1 rounded-full">
-                      Beta
+                      Privacy-First
                     </span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  <div className="text-xs text-muted-foreground">
+                    Download AI models to run locally in your browser. No data sent to servers - 100% private.
+                  </div>
+                  
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium">Use Local AI</label>
-                      <Button
-                        variant={webllmEnabled ? "default" : "outline"}
-                        size="sm"
-                        onClick={handleWebLLMToggle}
-                        className="h-8"
-                      >
-                        {webllmEnabled ? "Enabled" : "Disabled"}
-                      </Button>
-                    </div>
+                    <label className="text-sm font-medium">Available Models</label>
                     
-                    {webllmEnabled && (
-                      <>
-                        <div className="text-xs text-muted-foreground">
-                          Run AI models locally in your browser. No data sent to servers.
+                    {downloadProgress && (
+                      <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium">{downloadProgress.text}</span>
+                          <span className="text-sm text-muted-foreground">
+                            {Math.round(downloadProgress.progress * 100)}%
+                          </span>
                         </div>
+                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                          <div 
+                            className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                            style={{ width: `${downloadProgress.progress * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {availableModels.map((model) => {
+                        const isCached = cachedModels.includes(model.id);
+                        const isDownloading = downloadingModel === model.id;
+                        const isSelected = selectedModel === model.id;
                         
-                        <Separator />
-                        
-                        <div className="space-y-3">
-                          <label className="text-sm font-medium">Available Models</label>
-                          
-                          {downloadProgress && (
-                            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="text-sm font-medium">{downloadProgress.text}</span>
-                                <span className="text-sm text-muted-foreground">
-                                  {Math.round(downloadProgress.progress * 100)}%
-                                </span>
+                        return (
+                          <div
+                            key={model.id}
+                            className={`p-3 border rounded-lg transition-all ${
+                              isSelected 
+                                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' 
+                                : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <h4 className="text-sm font-medium truncate">
+                                    {model.name}
+                                  </h4>
+                                  <span className="text-xs text-muted-foreground">
+                                    {model.parameters}
+                                  </span>
+                                  {isCached && (
+                                    <Check className="h-3 w-3 text-green-500" />
+                                  )}
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {model.description}
+                                </p>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <span className="text-xs text-muted-foreground">
+                                    Size: {model.size}
+                                  </span>
+                                  {isCached && (
+                                    <span className="text-xs text-green-600 dark:text-green-400">
+                                      Downloaded
+                                    </span>
+                                  )}
+                                </div>
                               </div>
-                              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                                <div 
-                                  className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                                  style={{ width: `${downloadProgress.progress * 100}%` }}
-                                />
+                              
+                              <div className="ml-2 flex gap-1">
+                                {isCached ? (
+                                  <Button
+                                    variant={isSelected ? "default" : "outline"}
+                                    size="sm"
+                                    onClick={() => handleModelSelect(model.id)}
+                                    disabled={isDownloading}
+                                    className="h-8"
+                                  >
+                                    {isSelected ? "Active" : "Select"}
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleModelDownload(model)}
+                                    disabled={isDownloading || !!downloadingModel}
+                                    className="h-8"
+                                  >
+                                    {isDownloading ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <Download className="h-3 w-3" />
+                                    )}
+                                  </Button>
+                                )}
                               </div>
                             </div>
-                          )}
-                          
-                          <div className="space-y-2 max-h-64 overflow-y-auto">
-                            {availableModels.map((model) => {
-                              const isCached = cachedModels.includes(model.id);
-                              const isDownloading = downloadingModel === model.id;
-                              const isSelected = selectedModel === model.id;
-                              
-                              return (
-                                <div
-                                  key={model.id}
-                                  className={`p-3 border rounded-lg transition-all ${
-                                    isSelected 
-                                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' 
-                                      : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-                                  }`}
-                                >
-                                  <div className="flex items-start justify-between">
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-center gap-2">
-                                        <h4 className="text-sm font-medium truncate">
-                                          {model.name}
-                                        </h4>
-                                        <span className="text-xs text-muted-foreground">
-                                          {model.parameters}
-                                        </span>
-                                        {isCached && (
-                                          <Check className="h-3 w-3 text-green-500" />
-                                        )}
-                                      </div>
-                                      <p className="text-xs text-muted-foreground mt-1">
-                                        {model.description}
-                                      </p>
-                                      <div className="flex items-center gap-2 mt-1">
-                                        <span className="text-xs text-muted-foreground">
-                                          Size: {model.size}
-                                        </span>
-                                        {isCached && (
-                                          <span className="text-xs text-green-600 dark:text-green-400">
-                                            Downloaded
-                                          </span>
-                                        )}
-                                      </div>
-                                    </div>
-                                    
-                                    <div className="ml-2 flex gap-1">
-                                      {isCached ? (
-                                        <Button
-                                          variant={isSelected ? "default" : "outline"}
-                                          size="sm"
-                                          onClick={() => handleModelSelect(model.id)}
-                                          disabled={isDownloading}
-                                          className="h-8"
-                                        >
-                                          {isSelected ? "Active" : "Select"}
-                                        </Button>
-                                      ) : (
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          onClick={() => handleModelDownload(model)}
-                                          disabled={isDownloading || !!downloadingModel}
-                                          className="h-8"
-                                        >
-                                          {isDownloading ? (
-                                            <Loader2 className="h-3 w-3 animate-spin" />
-                                          ) : (
-                                            <Download className="h-3 w-3" />
-                                          )}
-                                        </Button>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })}
                           </div>
-                          
-                          {cachedModels.length > 0 && (
-                            <>
-                              <Separator />
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  if (confirm('Clear all downloaded models? This will free up storage space.')) {
-                                    webllmService.clearModelCache();
-                                    // Force re-render by closing and opening settings
-                                    onClose();
-                                    setTimeout(() => window.location.reload(), 100);
-                                  }
-                                }}
-                                className="w-full text-red-600 hover:text-red-700"
-                              >
-                                Clear All Downloaded Models
-                              </Button>
-                            </>
-                          )}
-                        </div>
+                        );
+                      })}
+                    </div>
+                    
+                    {cachedModels.length > 0 && (
+                      <>
+                        <Separator />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            if (confirm('Clear all downloaded models? This will free up storage space.')) {
+                              webllmService.clearModelCache();
+                              onClose();
+                              setTimeout(() => window.location.reload(), 100);
+                            }
+                          }}
+                          className="w-full text-red-600 hover:text-red-700"
+                        >
+                          Clear All Downloaded Models
+                        </Button>
                       </>
                     )}
                   </div>
                 </CardContent>
               </Card>
+
               {/* Language Settings */}
               <Card>
                 <CardHeader>

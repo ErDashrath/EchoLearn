@@ -40,7 +40,9 @@ import {
   ChevronLeft,
   Plus,
   FileText,
+  Download,
 } from 'lucide-react';
+import { ModelDownloadPanel } from '@/components/chat/ModelDownloadPanel';
 import { useTheme } from '@/components/ui/theme-provider';
 import { cn } from '@/lib/utils';
 
@@ -68,6 +70,7 @@ interface AppLayoutProps {
 const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showModelPanel, setShowModelPanel] = useState(false);
   const [location, setLocation] = useLocation();
   const { user, logout } = useAuth();
   const { theme, setTheme } = useTheme();
@@ -184,13 +187,20 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                 </div>
 
                 {/* New Chat Button - Mobile */}
-                <div className="px-4 py-3">
+                <div className="px-4 py-3 space-y-2">
                   <button
                     onClick={() => handleNavClick('/')}
                     className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 text-white font-medium shadow-lg shadow-blue-500/25"
                   >
                     <Plus className="w-4 h-4" />
                     <span>New Chat</span>
+                  </button>
+                  <button
+                    onClick={() => { setMobileMenuOpen(false); setShowModelPanel(true); }}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-medium shadow-lg shadow-emerald-500/25"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Download Models</span>
                   </button>
                 </div>
 
@@ -268,6 +278,17 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           >
             <Plus className="w-4 h-4" />
             {sidebarOpen && <span>New Chat</span>}
+          </button>
+        </div>
+
+        {/* Download Models Button */}
+        <div className="px-3 pb-2">
+          <button
+            onClick={() => setShowModelPanel(true)}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-medium shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 transition-all hover:scale-[1.02] active:scale-[0.98]"
+          >
+            <Download className="w-4 h-4" />
+            {sidebarOpen && <span>Download Models</span>}
           </button>
         </div>
 
@@ -370,6 +391,12 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           {children}
         </div>
       </main>
+
+      {/* Model Download Panel (Right Side) */}
+      <ModelDownloadPanel
+        isOpen={showModelPanel}
+        onClose={() => setShowModelPanel(false)}
+      />
     </div>
   );
 };
