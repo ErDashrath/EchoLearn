@@ -6,9 +6,12 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "postinstall": "node scripts/fix-piper-wasm.js"
   },
   "dependencies": {
+    "@huggingface/transformers": "^3.8.1",
+    "@mintplex-labs/piper-tts-web": "^1.0.4",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-aspect-ratio": "^1.1.7",
@@ -41,11 +44,13 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "edge-tts-node": "^1.5.7",
     "framer-motion": "^12.23.12",
     "highlight.js": "^11.11.1",
     "localforage": "^1.10.0",
     "lucide-react": "^0.539.0",
     "path": "^0.12.7",
+    "piper-wasm": "^0.1.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.62.0",
@@ -74,6 +79,7 @@
     "tailwindcss": "^3.3.0",
     "tailwindcss-animate": "^1.0.7",
     "typescript": "^5.0.2",
-    "vite": "^5.4.19"
+    "vite": "^5.4.19",
+    "vite-plugin-static-copy": "^3.2.0"
   }
 }

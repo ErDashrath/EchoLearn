@@ -11,6 +11,7 @@ import LoginPage from "@/pages/login";
 import AssessmentPage from "@/pages/assessment";
 import TestPage from "@/pages/test";
 import ChatPage from "@/pages/chat-v2"; // F010: Using new persistent chat page
+import VoicePage from "@/pages/voice"; // F012-F016: Voice Therapy
 import NotFound from "@/pages/not-found";
 import { SystemPromptDemo } from "@/components/demo/SystemPromptDemo";
 
@@ -47,6 +48,13 @@ function Router() {
           <AppLayout>
             <SystemPromptDemo />
           </AppLayout>
+        </ProtectedRoute>
+      </Route>
+      
+      {/* Voice Therapy - Full screen experience */}
+      <Route path="/voice">
+        <ProtectedRoute>
+          <VoicePage />
         </ProtectedRoute>
       </Route>
       
