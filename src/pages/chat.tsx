@@ -1,25 +1,38 @@
 import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { ChatArea } from "@/components/chat/ChatArea";
 import { InputArea } from "@/components/chat/InputArea";
 import { Sidebar } from "@/components/navigation/Sidebar";
 import { HamburgerMenu } from "@/components/navigation/HamburgerMenu";
 import { ModelSelector } from "@/components/navigation/ModelSelector";
-import { SystemPromptManager } from "@/components/chat/SystemPromptManager";
 import { useChat } from "@/hooks/use-chat";
+import { useChatSession } from "@/hooks/use-chat-session";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/components/ui/theme-provider";
-import { Bot, Moon, Sun, Volume2, VolumeX, Settings, Brain } from "lucide-react";
+import { Bot, Moon, Sun, Volume2, VolumeX, Brain } from "lucide-react";
 import type { ChatMode, FocusMode } from "@/types/schema";
 import type { DASS21Results } from "@/services/mental-health-prompt-service";
 
 export default function ChatPage() {
   const [showSidebar, setShowSidebar] = useState(false);
-  const [showSystemPrompt, setShowSystemPrompt] = useState(false);
   const [dass21Results, setDass21Results] = useState<DASS21Results | null>(null);
+  // System prompt state
+  const [customSystemPrompt, setCustomSystemPrompt] = useState("");
+  const [isCustomPromptEnabled, setIsCustomPromptEnabled] = useState(false);
+  
   const { theme, toggleTheme } = useTheme();
   const { user, getDASS21Results, hasCompletedDASS21 } = useAuth();
+  
+  // Chat session hook for history management
+  const {
+    session,
+    sessions,
+    isLoading: sessionsLoading,
+    createNewSession,
+    loadSession,
+    deleteSession,
+  } = useChatSession({ autoLoad: true });
   
   // F009: Load DASS-21 results for personalized AI
   useEffect(() => {
@@ -84,6 +97,27 @@ export default function ChatPage() {
     };
   };
 
+  // Chat History handlers
+  const handleNewSession = async () => {
+    await createNewSession();
+  };
+
+  const handleSelectSession = async (sessionId: string) => {
+    await loadSession(sessionId);
+  };
+
+  const handleDeleteSession = async (sessionId: string) => {
+    if (confirm('Delete this conversation?')) {
+      await deleteSession(sessionId);
+    }
+  };
+
+  // System Prompt handler
+  const handleSystemPromptChange = (prompt: string, isEnabled: boolean) => {
+    setCustomSystemPrompt(prompt);
+    setIsCustomPromptEnabled(isEnabled);
+    console.log("System prompt updated:", { prompt, isEnabled });
+  };
   // F009: Get personalized greeting
   const getPersonalizedGreeting = () => {
     const name = user?.name || user?.username || '';
@@ -131,17 +165,6 @@ export default function ChatPage() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setShowSystemPrompt(!showSystemPrompt)}
-            className={`h-10 w-10 rounded-lg hover:bg-gray-800 ${
-              showSystemPrompt ? 'text-blue-400 bg-blue-900/20' : 'text-gray-400'
-            }`}
-          >
-            <Settings className="h-4 w-4" />
-          </Button>
-          
-          <Button
-            variant="ghost"
-            size="icon"
             onClick={() => toggleTTS(!ttsEnabled)}
             className={`h-10 w-10 rounded-lg hover:bg-gray-800 ${
               ttsEnabled ? 'text-blue-400 bg-blue-900/20' : 'text-gray-400'
@@ -160,33 +183,6 @@ export default function ChatPage() {
           </Button>
         </div>
       </header>
-
-      {/* System Prompt Modal */}
-      <AnimatePresence>
-        {showSystemPrompt && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-            onClick={() => setShowSystemPrompt(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="w-full max-w-lg"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <SystemPromptManager
-                onPromptChange={(prompt, isEnabled) => {
-                  console.log("System prompt updated:", { prompt, isEnabled });
-                }}
-              />
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Main Content Area */}
       <div className={`flex-1 flex flex-col transition-all duration-300 ${showSidebar ? 'ml-80' : ''}`}>
@@ -309,6 +305,17 @@ export default function ChatPage() {
         selectedModel={selectedModel || undefined}
         onModelSelect={selectWebLLMModel}
         stats={calculateStats()}
+        // Chat History props
+        sessions={sessions}
+        currentSessionId={session?.id || null}
+        onSelectSession={handleSelectSession}
+        onNewSession={handleNewSession}
+        onDeleteSession={handleDeleteSession}
+        sessionsLoading={sessionsLoading}
+        // System Prompt props
+        customSystemPrompt={customSystemPrompt}
+        isCustomPromptEnabled={isCustomPromptEnabled}
+        onSystemPromptChange={handleSystemPromptChange}
       />
     </div>
   );

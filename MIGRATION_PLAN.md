@@ -30,63 +30,63 @@ npx skills add vercel-labs/agent-browser
 
 | # | Module | Description | Priority | Status |
 |---|--------|-------------|----------|--------|
-| **F001** | Auth System | Local authentication with encrypted storage | 🔴 High | ⬜ Not Started |
-| **F002** | Encrypted Storage | LocalForage + Web Crypto API | 🔴 High | ⬜ Not Started |
-| **F003** | Theme System | Dark/Light mode with system preference | 🟡 Medium | ✅ Exists |
-| **F004** | Layout System | Responsive sidebar + header + main content | 🔴 High | ⬜ Not Started |
+| **F001** | Auth System | Local authentication with encrypted storage | 🔴 High | ✅ Complete |
+| **F002** | Encrypted Storage | LocalForage + Web Crypto API | 🔴 High | ✅ Complete |
+| **F003** | Theme System | Dark/Light mode with system preference | 🟡 Medium | ✅ Complete |
+| **F004** | Layout System | Responsive sidebar + header + main content | 🔴 High | ✅ Complete |
 
 ### Phase 2: Mental Health Core (Week 2)
 
 | # | Module | Description | Priority | Status |
 |---|--------|-------------|----------|--------|
-| **F005** | DASS-21 Assessment | Depression, Anxiety, Stress screening | 🔴 High | ⬜ Not Started |
-| **F006** | Assessment Results | Visual score display with severity levels | 🔴 High | ⬜ Not Started |
-| **F007** | User Onboarding | First-time user flow with assessment | 🟡 Medium | ⬜ Not Started |
+| **F005** | DASS-21 Assessment | Depression, Anxiety, Stress screening | 🔴 High | ✅ Complete |
+| **F006** | Assessment Results | Visual score display with severity levels | 🔴 High | ✅ Complete |
+| **F007** | User Onboarding | First-time user flow with assessment | 🟡 Medium | ✅ Complete |
 
 ### Phase 3: AI Chat (Week 2-3)
 
 | # | Module | Description | Priority | Status |
 |---|--------|-------------|----------|--------|
-| **F008** | WebLLM Chat | Optimized AI chat (already fast) | 🔴 High | ✅ Exists |
-| **F009** | DASS-21 Context | Inject assessment into AI prompts | 🟡 Medium | ⬜ Not Started |
-| **F010** | Chat History | Persist conversations with encryption | 🟡 Medium | ⬜ Not Started |
-| **F011** | Typing Indicators | Animated AI thinking state | 🟢 Low | ⬜ Not Started |
+| **F008** | WebLLM Chat | Optimized AI chat (already fast) | 🔴 High | ✅ Complete |
+| **F009** | DASS-21 Context | Inject assessment into AI prompts | 🟡 Medium | ✅ Complete |
+| **F010** | Chat History | Persist conversations with encryption | 🟡 Medium | ✅ Complete |
+| **F011** | Typing Indicators | Animated AI thinking state | 🟢 Low | ✅ Complete |
 
 ### Phase 4: Voice Therapy (Week 3-4)
 
 | # | Module | Description | Priority | Status |
 |---|--------|-------------|----------|--------|
-| **F012** | Whisper STT | Speech-to-text using @remotion/whisper-web | 🔴 High | ⬜ Not Started |
-| **F013** | Piper TTS | Text-to-speech using piper-wasm | 🔴 High | ⬜ Not Started |
-| **F014** | Voice Visualizer | Audio waveform animation | 🟡 Medium | ⬜ Not Started |
-| **F015** | Voice Selector | Choose TTS voice (Amy, Jenny, Joe, etc.) | 🟡 Medium | ⬜ Not Started |
-| **F016** | Voice Session | Push-to-talk conversation flow | 🔴 High | ⬜ Not Started |
+| **F012** | Whisper STT | Speech-to-text using @huggingface/transformers | 🔴 High | ✅ Complete |
+| **F013** | Piper TTS | Text-to-speech using piper-wasm | 🔴 High | ✅ Complete |
+| **F014** | Voice Visualizer | Audio waveform animation | 🟡 Medium | ✅ Complete |
+| **F015** | Voice Selector | Choose TTS voice (5 ASMR voices) | 🟡 Medium | ✅ Complete |
+| **F016** | Voice Session | Push-to-talk conversation flow | 🔴 High | ✅ Complete |
 
 ### Phase 5: Journaling (Week 4)
 
 | # | Module | Description | Priority | Status |
 |---|--------|-------------|----------|--------|
-| **F017** | Journal Editor | Rich text entry with auto-save | 🔴 High | ⬜ Not Started |
-| **F018** | AI Analysis | Mood, sentiment, stress detection | 🔴 High | ⬜ Not Started |
-| **F019** | Journal History | List with search and filters | 🟡 Medium | ⬜ Not Started |
-| **F020** | Entry Details | View analysis results per entry | 🟡 Medium | ⬜ Not Started |
+| **F017** | Journal Editor | Rich text entry with auto-save | 🔴 High | ✅ Complete |
+| **F018** | AI Analysis | Mood, sentiment, stress detection | 🔴 High | ✅ Complete |
+| **F019** | Journal History | List with search and filters | 🟡 Medium | ✅ Complete |
+| **F020** | Entry Details | View analysis results per entry | 🟡 Medium | ✅ Complete |
 
 ### Phase 6: Dashboard & Analytics (Week 5)
 
 | # | Module | Description | Priority | Status |
 |---|--------|-------------|----------|--------|
-| **F021** | Stats Overview | Total entries, avg mood, trends | 🔴 High | ⬜ Not Started |
-| **F022** | Mood Charts | Line chart for sentiment over time | 🔴 High | ⬜ Not Started |
-| **F023** | Emotion Distribution | Pie/bar chart for emotions | 🟡 Medium | ⬜ Not Started |
-| **F024** | Stress Levels | Visual stress distribution | 🟡 Medium | ⬜ Not Started |
-| **F025** | DASS-21 Progress | Assessment history comparison | 🟡 Medium | ⬜ Not Started |
+| **F021** | Stats Overview | Total entries, avg mood, trends | 🔴 High | ✅ Complete |
+| **F022** | Mood Charts | Area chart for sentiment over time | 🔴 High | ✅ Complete |
+| **F023** | Emotion Distribution | Pie chart for emotions | 🟡 Medium | ✅ Complete |
+| **F024** | Stress Levels | Bar chart stress distribution | 🟡 Medium | ✅ Complete |
+| **F025** | DASS-21 Progress | Assessment baseline display | 🟡 Medium | ✅ Complete |
 
 ### Phase 7: Reports & Export (Week 5)
 
 | # | Module | Description | Priority | Status |
 |---|--------|-------------|----------|--------|
-| **F026** | PDF Report | Generate mental health summary PDF | 🟡 Medium | ⬜ Not Started |
-| **F027** | Data Export | Export journal data as JSON/CSV | 🟢 Low | ⬜ Not Started |
+| **F026** | PDF Report | Generate mental health summary PDF | 🟡 Medium | ✅ Complete |
+| **F027** | Data Export | Export journal data as JSON/CSV | 🟢 Low | ✅ Complete |
 
 ---
 

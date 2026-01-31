@@ -18,7 +18,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import {
   chatMemoryService,
   ChatSession,
-  ChatMessage,
   MemoryContext,
   MemoryConfig,
 } from '@/services/chat-memory-service';
@@ -97,11 +96,11 @@ export function useChatSession(options: UseChatSessionOptions = {}): UseChatSess
   // ===========================================================================
 
   const loadAllSessions = useCallback(async () => {
-    if (!user?.id) return;
+    if (!user?.username) return;
 
     setIsLoading(true);
     try {
-      const userSessions = await chatMemoryService.getUserSessions(user.id);
+      const userSessions = await chatMemoryService.getUserSessions(user.username);
       setSessions(userSessions);
     } catch (err) {
       console.error('Failed to load sessions:', err);
@@ -109,7 +108,7 @@ export function useChatSession(options: UseChatSessionOptions = {}): UseChatSess
     } finally {
       setIsLoading(false);
     }
-  }, [user?.id]);
+  }, [user?.username]);
 
   const loadSession = useCallback(async (sessionId: string) => {
     setIsLoading(true);
@@ -133,19 +132,19 @@ export function useChatSession(options: UseChatSessionOptions = {}): UseChatSess
 
   // Auto-load on mount
   useEffect(() => {
-    if (autoLoad && user?.id) {
+    if (autoLoad && user?.username) {
       loadAllSessions().then(() => {
         // Optionally load most recent session
       });
     }
-  }, [autoLoad, user?.id, loadAllSessions]);
+  }, [autoLoad, user?.username, loadAllSessions]);
 
   // ===========================================================================
   // SESSION MANAGEMENT
   // ===========================================================================
 
   const createNewSession = useCallback(async (title?: string): Promise<ChatSession | null> => {
-    if (!user?.id) {
+    if (!user?.username) {
       setError('Must be logged in to create a session');
       return null;
     }
@@ -154,7 +153,7 @@ export function useChatSession(options: UseChatSessionOptions = {}): UseChatSess
     setError(null);
 
     try {
-      const newSession = await chatMemoryService.createSession(user.id, title);
+      const newSession = await chatMemoryService.createSession(user.username, title);
       setSession(newSession);
       setMemoryContext(chatMemoryService.getMemoryContext(newSession));
       setSessions(prev => [newSession, ...prev]);
@@ -166,7 +165,7 @@ export function useChatSession(options: UseChatSessionOptions = {}): UseChatSess
     } finally {
       setIsLoading(false);
     }
-  }, [user?.id]);
+  }, [user?.username]);
 
   const deleteSession = useCallback(async (sessionId: string) => {
     setIsLoading(true);

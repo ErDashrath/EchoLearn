@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { 
   X, 
   Brain, 
@@ -19,11 +21,19 @@ import {
   BarChart3,
   Mic,
   CheckCircle,
-  Circle
+  Circle,
+  MessageSquare,
+  Plus,
+  Trash2,
+  Clock,
+  Save,
+  RotateCcw,
+  Sparkles
 } from "lucide-react";
 import { TTSToggle } from "@/components/TTSToggle";
 import { webllmService, type WebLLMModel } from "@/services/webllm-service";
 import type { ChatMode, FocusMode } from "@/types/schema";
+import type { ChatSession } from "@/services/chat-memory-service";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -43,6 +53,17 @@ interface SidebarProps {
   // WebLLM props
   selectedModel?: string;
   onModelSelect?: (modelId: string) => void;
+  // Chat History props
+  sessions?: ChatSession[];
+  currentSessionId?: string | null;
+  onSelectSession?: (sessionId: string) => void;
+  onNewSession?: () => void;
+  onDeleteSession?: (sessionId: string) => void;
+  sessionsLoading?: boolean;
+  // System Prompt props
+  customSystemPrompt?: string;
+  isCustomPromptEnabled?: boolean;
+  onSystemPromptChange?: (prompt: string, isEnabled: boolean) => void;
 }
 
 export function Sidebar({
@@ -61,7 +82,18 @@ export function Sidebar({
     speakingTime: "0 min"
   },
   selectedModel: _selectedModel,
-  onModelSelect
+  onModelSelect,
+  // Chat History props
+  sessions = [],
+  currentSessionId = null,
+  onSelectSession,
+  onNewSession,
+  onDeleteSession,
+  sessionsLoading = false,
+  // System Prompt props
+  customSystemPrompt: initialCustomPrompt = "",
+  isCustomPromptEnabled: initialCustomEnabled = false,
+  onSystemPromptChange
 }: SidebarProps) {
   const [downloadingModel, setDownloadingModel] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<{ progress: number; text: string } | null>(null);
@@ -69,6 +101,11 @@ export function Sidebar({
   const [selectedLevel, setSelectedLevel] = useState("intermediate");
   const [cachedModels, setCachedModels] = useState<string[]>([]);
   const [activeModel, setActiveModel] = useState<string | null>(null);
+  
+  // System prompt state
+  const [customPrompt, setCustomPrompt] = useState(initialCustomPrompt);
+  const [isPromptEnabled, setIsPromptEnabled] = useState(initialCustomEnabled);
+  const [isSavingPrompt, setIsSavingPrompt] = useState(false);
 
   const availableModels = webllmService.getAvailableModels();
 
@@ -144,6 +181,50 @@ export function Sidebar({
       }
     } catch (error) {
       console.error('Failed to activate model:', error);
+    }
+  };
+
+  // Chat History helpers
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays} days ago`;
+    return date.toLocaleDateString();
+  };
+
+  const getSessionPreview = (session: ChatSession): string => {
+    if (session.messages.length === 0) return 'New conversation';
+    const lastUserMsg = [...session.messages].reverse().find(m => m.role === 'user');
+    if (lastUserMsg) {
+      return lastUserMsg.content.length > 50 
+        ? lastUserMsg.content.substring(0, 50) + '...'
+        : lastUserMsg.content;
+    }
+    return 'Conversation started';
+  };
+
+  // System Prompt handlers
+  const handleSavePrompt = async () => {
+    if (!customPrompt.trim()) return;
+    setIsSavingPrompt(true);
+    await new Promise(resolve => setTimeout(resolve, 500));
+    onSystemPromptChange?.(customPrompt, true);
+    setIsSavingPrompt(false);
+  };
+
+  const handleResetPrompt = () => {
+    setCustomPrompt("");
+    setIsPromptEnabled(false);
+    onSystemPromptChange?.("", false);
+  };
+
+  const handlePromptToggle = (enabled: boolean) => {
+    setIsPromptEnabled(enabled);
+    if (!enabled) {
+      onSystemPromptChange?.("", false);
     }
   };
 
@@ -339,6 +420,97 @@ export function Sidebar({
                 </CardContent>
               </Card>
 
+              {/* Chat History */}
+              <Card className="border-gray-800 bg-gray-800/50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2 text-white">
+                    <MessageSquare className="h-5 w-5 text-emerald-400" />
+                    Chat History
+                    {sessions.length > 0 && (
+                      <Badge variant="secondary" className="bg-emerald-900/30 text-emerald-300 border-emerald-700">
+                        {sessions.length}
+                      </Badge>
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {/* New Chat Button */}
+                  <Button
+                    onClick={onNewSession}
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center gap-2"
+                  >
+                    <Plus className="h-4 w-4" />
+                    New Chat
+                  </Button>
+
+                  {/* Session List */}
+                  <div className="max-h-64 overflow-y-auto scroll-hidden space-y-2">
+                    {sessionsLoading ? (
+                      <div className="text-center py-4 text-gray-500">
+                        <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
+                        Loading sessions...
+                      </div>
+                    ) : sessions.length === 0 ? (
+                      <div className="text-center py-4 text-gray-500">
+                        <MessageSquare className="h-6 w-6 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">No chat history yet</p>
+                      </div>
+                    ) : (
+                      sessions.slice(0, 10).map((session) => (
+                        <motion.div
+                          key={session.id}
+                          whileHover={{ scale: 1.01 }}
+                          whileTap={{ scale: 0.99 }}
+                          className={`
+                            group relative p-2 rounded-lg cursor-pointer transition-colors
+                            ${currentSessionId === session.id
+                              ? 'bg-emerald-900/30 border border-emerald-700'
+                              : 'hover:bg-gray-700 border border-transparent'
+                            }
+                          `}
+                          onClick={() => onSelectSession?.(session.id)}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-medium text-white text-sm truncate">
+                                {session.title}
+                              </h4>
+                              <p className="text-xs text-gray-400 truncate mt-0.5">
+                                {getSessionPreview(session)}
+                              </p>
+                              <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+                                <Clock className="h-3 w-3" />
+                                {formatDate(session.updatedAt)}
+                                <span>•</span>
+                                <MessageSquare className="h-3 w-3" />
+                                {session.messages.length}
+                              </div>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-red-400"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onDeleteSession?.(session.id);
+                              }}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </motion.div>
+                      ))
+                    )}
+                  </div>
+                  
+                  {sessions.length > 10 && (
+                    <p className="text-xs text-gray-500 text-center">
+                      Showing 10 of {sessions.length} conversations
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+
               {/* Chat Settings */}
               <Card className="border-gray-800 bg-gray-800/50">
                 <CardHeader>
@@ -389,6 +561,71 @@ export function Sidebar({
                       </div>
                       <TTSToggle enabled={ttsEnabled} onToggle={onTTSToggle} />
                     </div>
+                  </div>
+
+                  <Separator className="bg-gray-700" />
+
+                  {/* System Prompt Settings */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="h-4 w-4 text-amber-400" />
+                        <span className="text-sm font-medium text-gray-200">System Prompt</span>
+                        {isPromptEnabled && customPrompt.trim() && (
+                          <Badge variant="secondary" className="text-xs bg-amber-900/30 text-amber-300 border-amber-700">
+                            Custom
+                          </Badge>
+                        )}
+                      </div>
+                      <Switch
+                        checked={isPromptEnabled}
+                        onCheckedChange={handlePromptToggle}
+                        className="data-[state=checked]:bg-amber-500"
+                      />
+                    </div>
+
+                    <AnimatePresence>
+                      {isPromptEnabled && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="space-y-3 overflow-hidden"
+                        >
+                          <Textarea
+                            placeholder="e.g., 'You are a supportive therapist who specializes in anxiety management. Be warm, empathetic, and provide practical coping strategies.'"
+                            value={customPrompt}
+                            onChange={(e) => setCustomPrompt(e.target.value)}
+                            className="min-h-[100px] text-sm bg-gray-800 border-gray-700 text-gray-200 placeholder:text-gray-500 resize-none"
+                            maxLength={1000}
+                          />
+                          <div className="flex justify-between items-center text-xs text-gray-500">
+                            <span>{customPrompt.length}/1000</span>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={handleResetPrompt}
+                              className="flex-1 h-8 text-xs border-gray-700 text-gray-300 hover:bg-gray-700"
+                              disabled={!customPrompt && !isPromptEnabled}
+                            >
+                              <RotateCcw className="h-3 w-3 mr-1" />
+                              Reset
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={handleSavePrompt}
+                              className="flex-1 h-8 text-xs bg-amber-600 hover:bg-amber-700"
+                              disabled={!customPrompt.trim() || isSavingPrompt}
+                            >
+                              <Save className="h-3 w-3 mr-1" />
+                              {isSavingPrompt ? "Saving..." : "Apply"}
+                            </Button>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                 </CardContent>
               </Card>

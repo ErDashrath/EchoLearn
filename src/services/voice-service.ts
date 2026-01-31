@@ -193,19 +193,32 @@ class VoiceService {
 
     try {
       this.updateState({ status: 'loading-stt', loadProgress: 0 });
-      console.log('🎤 Loading Whisper model...');
+      console.log('🎤 Loading Whisper Tiny model (fastest)...');
 
-      // Force WASM for stability (WebGPU has ONNX issues)
-      const device = 'wasm';
-      console.log(`[Whisper] Using device: ${device.toUpperCase()}`);
+      // Try WebGPU first, fallback to WASM
+      let device: 'webgpu' | 'wasm' = 'wasm';
+      try {
+        if (navigator.gpu) {
+          const adapter = await navigator.gpu.requestAdapter();
+          if (adapter) {
+            device = 'webgpu';
+            console.log('✅ Using WebGPU acceleration');
+          }
+        }
+      } catch {
+        console.log('⚠️ WebGPU unavailable, using WASM');
+      }
 
-      // Load Whisper tiny model for fast transcription
+      console.log(`[Whisper] Device: ${device.toUpperCase()}`);
+
+      // Load Whisper tiny - smallest and fastest model (~39MB)
+      // Using q8 (int8) quantization for best compatibility
       this.whisperPipeline = await pipeline(
         'automatic-speech-recognition',
         'onnx-community/whisper-tiny.en',
         {
           device,
-          dtype: 'q8', // Quantized int8 for stability
+          dtype: 'q8', // int8 quantization - best compatibility
           progress_callback: (progress: any) => {
             if (progress.status === 'progress' && progress.progress !== undefined) {
               const percent = Math.round(progress.progress);
@@ -217,7 +230,7 @@ class VoiceService {
       );
 
       this.updateState({ sttLoaded: true, loadProgress: 100 });
-      console.log('✅ Whisper STT initialized');
+      console.log('✅ Whisper Tiny initialized');
       return true;
     } catch (error) {
       console.error('Failed to initialize STT:', error);

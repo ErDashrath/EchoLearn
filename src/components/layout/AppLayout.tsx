@@ -38,6 +38,8 @@ import {
   Moon,
   Sun,
   ChevronLeft,
+  Plus,
+  FileText,
 } from 'lucide-react';
 import { useTheme } from '@/components/ui/theme-provider';
 import { cn } from '@/lib/utils';
@@ -55,6 +57,7 @@ const navItems: NavItem[] = [
   { id: 'journal', label: 'Journal', icon: BookOpen, href: '/journal' },
   { id: 'voice', label: 'Voice Therapy', icon: Mic, href: '/voice' },
   { id: 'dashboard', label: 'Dashboard', icon: BarChart3, href: '/dashboard' },
+  { id: 'reports', label: 'Reports', icon: FileText, href: '/reports' },
   { id: 'assessment', label: 'DASS-21', icon: ClipboardCheck, href: '/assessment' },
 ];
 
@@ -180,6 +183,17 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                   </Button>
                 </div>
 
+                {/* New Chat Button - Mobile */}
+                <div className="px-4 py-3">
+                  <button
+                    onClick={() => handleNavClick('/')}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 text-white font-medium shadow-lg shadow-blue-500/25"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>New Chat</span>
+                  </button>
+                </div>
+
                 {/* Mobile Navigation */}
                 <nav className="flex-1 p-4 space-y-1">
                   {navItems.map((item) => (
@@ -190,7 +204,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                         'w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all',
                         isActive(item.href)
                           ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg shadow-blue-500/25'
-                          : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400'
+                          : 'hover:bg-slate-100 dark:hover:bg-slate-800/60 text-slate-700 dark:text-slate-200'
                       )}
                     >
                       <item.icon className="w-5 h-5" />
@@ -225,7 +239,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       <motion.aside
         initial={false}
         animate={{ width: sidebarOpen ? 280 : 80 }}
-        className="hidden lg:flex fixed left-0 top-0 bottom-0 z-40 flex-col bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-r border-slate-200/50 dark:border-slate-800/50"
+        className="hidden lg:flex fixed left-0 top-0 bottom-0 z-40 flex-col bg-white dark:bg-slate-900/95 backdrop-blur-xl border-r border-slate-200 dark:border-slate-700/50"
       >
         {/* Sidebar Header */}
         <div className="flex items-center gap-3 p-4 h-16">
@@ -246,6 +260,17 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           </AnimatePresence>
         </div>
 
+        {/* New Chat Button - Always Visible */}
+        <div className="px-3 pb-2">
+          <button
+            onClick={() => handleNavClick('/')}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 text-white font-medium shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all hover:scale-[1.02] active:scale-[0.98]"
+          >
+            <Plus className="w-4 h-4" />
+            {sidebarOpen && <span>New Chat</span>}
+          </button>
+        </div>
+
         {/* Navigation */}
         <nav className="flex-1 px-3 py-4 space-y-1">
           {navItems.map((item) => (
@@ -256,7 +281,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                 'w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all group relative',
                 isActive(item.href)
                   ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg shadow-blue-500/25'
-                  : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400'
+                  : 'hover:bg-slate-100 dark:hover:bg-slate-800/60 text-slate-700 dark:text-slate-200'
               )}
             >
               <item.icon className="w-5 h-5 flex-shrink-0" />
@@ -284,13 +309,13 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         </nav>
 
         {/* Sidebar Footer */}
-        <div className="p-3 border-t border-slate-200/50 dark:border-slate-800/50">
+        <div className="p-3 border-t border-slate-200 dark:border-slate-700/50">
           {/* Collapse Toggle */}
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="w-full justify-center mb-2"
+            className="w-full justify-center mb-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60"
           >
             <ChevronLeft className={cn('h-4 w-4 transition-transform', !sidebarOpen && 'rotate-180')} />
           </Button>
