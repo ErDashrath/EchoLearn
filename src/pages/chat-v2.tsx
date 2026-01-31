@@ -1,26 +1,45 @@
+/**
+ * F010: Chat Page with Persistent Memory
+ * 
+ * Main chat interface with:
+ * - Persistent chat history
+ * - Smart memory summarization
+ * - Session management sidebar
+ * - DASS-21 personalization
+ * 
+ * @module pages/chat
+ */
+
 import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { ChatArea } from "@/components/chat/ChatArea";
 import { InputArea } from "@/components/chat/InputArea";
-import { Sidebar } from "@/components/navigation/Sidebar";
-import { HamburgerMenu } from "@/components/navigation/HamburgerMenu";
+import { ChatHistory } from "@/components/chat/ChatHistory";
 import { ModelSelector } from "@/components/navigation/ModelSelector";
-import { SystemPromptManager } from "@/components/chat/SystemPromptManager";
-import { useChat } from "@/hooks/use-chat";
+import { usePersistentChat } from "@/hooks/use-persistent-chat";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/components/ui/theme-provider";
-import { Bot, Moon, Sun, Volume2, VolumeX, Settings, Brain } from "lucide-react";
-import type { ChatMode, FocusMode } from "@/types/schema";
+import {
+  Bot,
+  Moon,
+  Sun,
+  Volume2,
+  VolumeX,
+  History,
+  Brain,
+  Sparkles,
+  Plus,
+} from "lucide-react";
 import type { DASS21Results } from "@/services/mental-health-prompt-service";
+import type { Message } from "@/types/schema";
 
 export default function ChatPage() {
-  const [showSidebar, setShowSidebar] = useState(false);
-  const [showSystemPrompt, setShowSystemPrompt] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [dass21Results, setDass21Results] = useState<DASS21Results | null>(null);
   const { theme, toggleTheme } = useTheme();
   const { user, getDASS21Results, hasCompletedDASS21 } = useAuth();
-  
+
   // F009: Load DASS-21 results for personalized AI
   useEffect(() => {
     const loadDASS21 = async () => {
@@ -31,58 +50,41 @@ export default function ChatPage() {
     };
     loadDASS21();
   }, [hasCompletedDASS21, getDASS21Results]);
-  
+
+  // Use persistent chat hook with memory
   const {
+    session,
+    sessions,
     messages,
-    mode,
-    focus,
-    ttsEnabled,
-    messagesLoading,
-    isSending,
-    isRegenerating,
+    memoryContext,
+    isLoading,
+    isGenerating,
+    isSummarizing,
     selectedModel,
-    isWebllmGenerating,
+    ttsEnabled,
+    createNewSession,
+    loadSession,
+    deleteSession,
     sendMessage,
-    regenerateMessage,
-    updateMode,
-    updateFocus,
+    stopGeneration,
+    selectModel,
     toggleTTS,
-    selectWebLLMModel,
-    stopWebLLMGeneration,
-    exportSession,
-  } = useChat(undefined, {
+    messagesEndRef,
+  } = usePersistentChat({
     userName: user?.name || user?.username,
-    dass21Results
+    dass21Results,
   });
 
-  const handleModeChange = (newMode: ChatMode) => {
-    updateMode(newMode);
-  };
-
-  const handleFocusChange = (newFocus: FocusMode) => {
-    updateFocus(newFocus);
-  };
-
-  const toggleSidebar = () => {
-    setShowSidebar(!showSidebar);
-  };
-
-  const closeSidebar = () => {
-    setShowSidebar(false);
-  };
-
-  const calculateStats = () => {
-    const messagesSent = messages.filter(m => m.role === "user").length;
-    const grammarImprovements = messages.reduce((acc, m) => 
-      acc + (m.grammarSuggestions?.length || 0), 0
-    );
-    
-    return {
-      messagesSent,
-      grammarImprovements,
-      speakingTime: "12 min", // This would be calculated from actual speech time
-    };
-  };
+  // Convert messages to the format expected by ChatArea
+  const formattedMessages: Message[] = messages.map((msg, index) => ({
+    id: msg.id || `msg-${index}`,
+    role: msg.role as "user" | "assistant",
+    content: msg.content,
+    createdAt: new Date(msg.timestamp),
+    sessionId: session?.id || "temp",
+    grammarSuggestions: null,
+    feedback: null,
+  }));
 
   // F009: Get personalized greeting
   const getPersonalizedGreeting = () => {
@@ -92,16 +94,45 @@ export default function ChatPage() {
     if (hour >= 5 && hour < 12) greeting = 'Good morning';
     else if (hour >= 12 && hour < 17) greeting = 'Good afternoon';
     else if (hour >= 17 && hour < 21) greeting = 'Good evening';
-    
+
     return name ? `${greeting}, ${name}` : greeting;
   };
 
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col">
-      {/* Header with Hamburger Menu */}
-      <header className={`flex items-center justify-between p-4 border-b border-gray-800 transition-all duration-300 ${showSidebar ? 'ml-80' : ''}`}>
+      {/* Chat History Sidebar */}
+      <ChatHistory
+        isOpen={showHistory}
+        onClose={() => setShowHistory(false)}
+        sessions={sessions}
+        currentSessionId={session?.id || null}
+        onSelectSession={(id) => {
+          loadSession(id);
+          setShowHistory(false);
+        }}
+        onNewSession={() => {
+          createNewSession();
+          setShowHistory(false);
+        }}
+        onDeleteSession={deleteSession}
+        isLoading={isLoading}
+      />
+
+      {/* Header */}
+      <header className="flex items-center justify-between p-4 border-b border-gray-800">
         <div className="flex items-center space-x-4">
-          <HamburgerMenu onClick={toggleSidebar} isOpen={showSidebar} />
+          {/* History Toggle */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowHistory(!showHistory)}
+            className={`h-10 w-10 rounded-lg hover:bg-gray-800 ${
+              showHistory ? 'text-blue-400 bg-blue-900/20' : 'text-gray-400'
+            }`}
+          >
+            <History className="h-5 w-5" />
+          </Button>
+
           <div className="flex items-center space-x-2">
             <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
               <Bot className="h-4 w-4 text-white" />
@@ -118,27 +149,25 @@ export default function ChatPage() {
             )}
           </div>
         </div>
-        
+
         <div className="flex items-center space-x-2">
+          {/* Memory indicator */}
+          {memoryContext?.summary && (
+            <div className="hidden md:flex items-center gap-1.5 text-xs text-purple-400 bg-purple-900/20 px-2 py-1 rounded">
+              <Sparkles className="h-3 w-3" />
+              Memory Active
+              {isSummarizing && <span className="animate-pulse">•</span>}
+            </div>
+          )}
+
           {/* Model Selector */}
           <ModelSelector
             selectedModel={selectedModel || "llama-3.2-3b"}
-            onModelSelect={selectWebLLMModel}
-            isLoading={isWebllmGenerating}
-            onOpenSidebar={toggleSidebar}
+            onModelSelect={selectModel}
+            isLoading={isGenerating}
+            onOpenSidebar={() => {}}
           />
-          
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setShowSystemPrompt(!showSystemPrompt)}
-            className={`h-10 w-10 rounded-lg hover:bg-gray-800 ${
-              showSystemPrompt ? 'text-blue-400 bg-blue-900/20' : 'text-gray-400'
-            }`}
-          >
-            <Settings className="h-4 w-4" />
-          </Button>
-          
+
           <Button
             variant="ghost"
             size="icon"
@@ -149,7 +178,7 @@ export default function ChatPage() {
           >
             {ttsEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
           </Button>
-          
+
           <Button
             variant="ghost"
             size="icon"
@@ -161,36 +190,9 @@ export default function ChatPage() {
         </div>
       </header>
 
-      {/* System Prompt Modal */}
-      <AnimatePresence>
-        {showSystemPrompt && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-            onClick={() => setShowSystemPrompt(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="w-full max-w-lg"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <SystemPromptManager
-                onPromptChange={(prompt, isEnabled) => {
-                  console.log("System prompt updated:", { prompt, isEnabled });
-                }}
-              />
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Main Content Area */}
-      <div className={`flex-1 flex flex-col transition-all duration-300 ${showSidebar ? 'ml-80' : ''}`}>
-        {messages.length === 0 ? (
+      <div className="flex-1 flex flex-col">
+        {formattedMessages.length === 0 ? (
           /* Welcome Screen */
           <div className="flex-1 flex flex-col items-center justify-center px-6 max-w-3xl mx-auto w-full">
             <motion.div
@@ -202,10 +204,24 @@ export default function ChatPage() {
                 {getPersonalizedGreeting()}
               </h1>
               <p className="text-gray-400 text-lg">
-                {dass21Results 
+                {dass21Results
                   ? "I'm here with personalized support based on your assessment. How are you feeling today?"
                   : "How are you feeling today? I'm here to listen, understand, and support you through anything."}
               </p>
+
+              {/* Memory info */}
+              {sessions.length > 0 && (
+                <p className="text-sm text-gray-500 mt-4">
+                  You have {sessions.length} saved conversation{sessions.length !== 1 ? 's' : ''}.{' '}
+                  <button
+                    className="text-blue-400 hover:underline"
+                    onClick={() => setShowHistory(true)}
+                  >
+                    View history
+                  </button>
+                </p>
+              )}
+
               {/* F009: Show severity indicators if elevated */}
               {dass21Results && (
                 <div className="flex justify-center gap-2 mt-4">
@@ -233,7 +249,7 @@ export default function ChatPage() {
               <div className="relative">
                 <InputArea
                   onSendMessage={sendMessage}
-                  disabled={isSending || messagesLoading}
+                  disabled={isGenerating || isLoading}
                   placeholder="Share what's on your mind... I'm here to listen."
                   isWelcomeScreen={true}
                 />
@@ -275,41 +291,50 @@ export default function ChatPage() {
         ) : (
           /* Chat Area */
           <div className="flex-1 flex flex-col">
+            {/* Session info bar */}
+            <div className="px-4 py-2 border-b border-gray-800 flex items-center justify-between text-sm">
+              <div className="flex items-center gap-3">
+                <span className="text-gray-400">
+                  {session?.title || 'Current Chat'}
+                </span>
+                {memoryContext?.summary && (
+                  <span className="text-xs text-purple-400 flex items-center gap-1">
+                    <Brain className="h-3 w-3" />
+                    {memoryContext.summary.messageCount} messages summarized
+                  </span>
+                )}
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={createNewSession}
+                className="text-gray-400 hover:text-white h-7 px-2"
+              >
+                <Plus className="h-3 w-3 mr-1" />
+                New Chat
+              </Button>
+            </div>
+
             <ChatArea
-              messages={messages}
-              isLoading={isSending}
-              onRegenerateMessage={regenerateMessage}
-              isRegenerating={isRegenerating}
-              isWebllmGenerating={isWebllmGenerating}
-              onStopGeneration={stopWebLLMGeneration}
+              messages={formattedMessages}
+              isLoading={isGenerating}
+              onRegenerateMessage={() => {}}
+              isRegenerating={false}
+              isWebllmGenerating={isGenerating}
+              onStopGeneration={stopGeneration}
             />
             <div className="p-4 max-w-2xl mx-auto w-full">
               <InputArea
                 onSendMessage={sendMessage}
-                disabled={isSending || messagesLoading}
+                disabled={isGenerating || isLoading}
                 placeholder="Continue the conversation..."
                 isWelcomeScreen={false}
               />
             </div>
+            <div ref={messagesEndRef} />
           </div>
         )}
       </div>
-
-      {/* Sidebar */}
-      <Sidebar
-        isOpen={showSidebar}
-        onClose={closeSidebar}
-        mode={mode}
-        focus={focus}
-        onModeChange={handleModeChange}
-        onFocusChange={handleFocusChange}
-        onExportChat={exportSession}
-        ttsEnabled={ttsEnabled}
-        onTTSToggle={toggleTTS}
-        selectedModel={selectedModel || undefined}
-        onModelSelect={selectWebLLMModel}
-        stats={calculateStats()}
-      />
     </div>
   );
 }

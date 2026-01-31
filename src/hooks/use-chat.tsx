@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { getApiUrl } from "@/lib/api-config";
 import { webllmService, type WebLLMGenerationConfig } from "@/services/webllm-service";
+import { mentalHealthPromptService, type DASS21Results } from "@/services/mental-health-prompt-service";
 import type { ChatSession, Message, ChatMode, FocusMode } from "@/types/schema";
 import { useToast } from "@/hooks/use-toast";
 import { ttsService } from "@/lib/tts-service";
@@ -11,7 +12,13 @@ interface ChatMessage extends Message {
   isTyping?: boolean;
 }
 
-export function useChat(sessionId?: string) {
+// F009: Interface for mental health context
+interface MentalHealthContext {
+  dass21Results?: DASS21Results | null;
+  userName?: string;
+}
+
+export function useChat(sessionId?: string, mentalHealthContext?: MentalHealthContext) {
   const [currentSessionId, setCurrentSessionId] = useState<string | undefined>(sessionId);
   const [mode, setMode] = useState<ChatMode>("conversation");
   const [focus, setFocus] = useState<FocusMode>("fluency");
@@ -304,8 +311,22 @@ export function useChat(sessionId?: string) {
         topP: 0.9
       };
 
-      // Stream the response
-      for await (const chunk of webllmService.generateResponse(conversationHistory, config)) {
+      // F009: Generate personalized system prompt based on DASS-21 results
+      const systemPrompt = mentalHealthPromptService.generateSystemPrompt({
+        userName: mentalHealthContext?.userName,
+        dass21Results: mentalHealthContext?.dass21Results,
+        sessionType: 'chat',
+        timeOfDay: mentalHealthPromptService.getTimeOfDay()
+      });
+
+      // Check for crisis signals and add crisis protocol if needed
+      const hasCrisisSignals = mentalHealthPromptService.containsCrisisSignals(content);
+      const finalSystemPrompt = hasCrisisSignals 
+        ? systemPrompt + mentalHealthPromptService.getCrisisResponseAddition()
+        : systemPrompt;
+
+      // Stream the response with personalized prompt
+      for await (const chunk of webllmService.generateResponse(conversationHistory, config, finalSystemPrompt)) {
         responseContent += chunk;
         
         // Update the message content in real-time

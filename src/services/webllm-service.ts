@@ -480,7 +480,8 @@ class WebLLMService {
 
   async *generateResponse(
     conversationHistory: Array<{role: string, content: string}>, 
-    config: WebLLMGenerationConfig = { temperature: 0.7, maxTokens: 512, topP: 0.9 }
+    config: WebLLMGenerationConfig = { temperature: 0.7, maxTokens: 512, topP: 0.9 },
+    systemPrompt?: string
   ): AsyncGenerator<string, void, unknown> {
     if (!this.engine || !this.currentModel) {
       throw new Error('No model loaded');
@@ -489,9 +490,12 @@ class WebLLMService {
     try {
       this.isGenerating = true;
       
+      // Use custom system prompt if provided, otherwise use default
+      const defaultSystemPrompt = "You are a friendly and helpful AI assistant. Have natural conversations while being helpful, engaging, and supportive. Feel free to ask questions, share insights, and express curiosity. Be conversational and personable.";
+      
       // Convert conversation history to WebLLM format
       const messages = [
-        { role: "system", content: "You are a friendly and helpful AI assistant. Have natural conversations while being helpful, engaging, and supportive. Feel free to ask questions, share insights, and express curiosity. Be conversational and personable." },
+        { role: "system", content: systemPrompt || defaultSystemPrompt },
         ...conversationHistory
       ];
 
