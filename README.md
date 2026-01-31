@@ -1,305 +1,344 @@
-# Mindscribe: Local AI-Powered Chat Platform
+# MindScribe: AI-Powered Mental Health Companion
 
-![Project Banner](https://placehold.co/1200x400/1E90FF/FFFFFF?text=Mindscribe%0ALocal%20AI%20Chat%20Platform)
+![MindScribe Banner](https://placehold.co/1200x400/1E3A5F/FFFFFF?text=MindScribe%0AAI%20Mental%20Health%20Companion)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)
 ![React](https://img.shields.io/badge/React-18.3+-61DAFB.svg)
 ![WebLLM](https://img.shields.io/badge/WebLLM-Enabled-purple.svg)
+![Whisper](https://img.shields.io/badge/Whisper-STT-green.svg)
+![Piper](https://img.shields.io/badge/Piper-TTS-orange.svg)
 [![Vercel](https://img.shields.io/badge/Vercel-Ready-black.svg)](https://vercel.com)
-[![Contributions Welcome](https://img.shields.io/badge/Contributions-welcome-brightgreen.svg)](#contributing)
 
-A modern, privacy-first chat platform that runs AI models directly in your browser. No servers, no API keys, no data collection - just pure local AI inference powered by WebLLM technology.
+A comprehensive, privacy-first mental health support platform powered by local AI. MindScribe provides therapeutic conversations, voice therapy sessions, mood journaling with AI analysis, and personalized mental health insights — all running directly in your browser with zero data leaving your device.
 
-## 🌟 What Makes Mindscribe Special
+## 🌟 What Makes MindScribe Special
 
-- **🔒 100% Private:** All AI processing happens in your browser - no data leaves your device
-- **🚀 Browser-Native AI:** Advanced language models running with WebGPU acceleration
-- **💻 Cross-Platform:** Works on any modern browser, any device, anywhere
-- **⚡ Fast & Efficient:** Optimized for performance with smart caching
-- **🎨 Beautiful UI:** Modern, responsive interface inspired by ChatGPT
-- **🌐 Deploy Anywhere:** Ready for Vercel, Netlify, or any static hosting
+- **🔒 100% Private:** All AI processing happens locally in your browser - no servers, no API calls
+- **🧠 DASS-21 Assessment:** Clinically-validated mental health screening for personalized support
+- **🎙️ Voice Therapy:** Speech-to-text (Whisper) and text-to-speech (Piper) for hands-free sessions
+- **📓 Smart Journaling:** AI-powered mood analysis, sentiment detection, and emotion tracking
+- **📊 Analytics Dashboard:** Visual insights into mood trends, stress levels, and emotional patterns
+- **📄 Export Reports:** Generate PDF reports and export data in JSON/CSV formats
+- **💻 Fully Offline:** Works without internet after initial model download
 
-## ✨ Key Features
+## ✨ Complete Feature Set (27 Features)
 
-### 🤖 **Local AI Models**
-- **Download & Manage:** Browse and download AI models directly in your browser
-- **Model Activation:** Easy activate/deactivate system for switching between models
-- **Smart Caching:** Efficient model storage with automatic cache management
-- **Multiple Models:** Support for Llama 3.2, Phi-3, Gemma, and more
+### 🔐 **Phase 1: Core Infrastructure**
+| Feature | Description |
+|---------|-------------|
+| **F001** Auth System | Local authentication with encrypted credentials |
+| **F002** Encrypted Storage | AES-GCM encryption using Web Crypto API |
+| **F003** Theme System | Dark/Light mode with system preference sync |
+| **F004** Layout System | Responsive sidebar navigation with AppLayout |
 
-### 💬 **Advanced Chat Experience**
-- **Natural Conversations:** Customizable AI personality and behavior
-- **System Prompts:** Create custom AI personas and conversation styles
-- **Clean Interface:** Distraction-free chat with optimized message width
-- **Hidden Scrollbars:** Smooth scrolling without visual clutter
-- **Responsive Design:** Perfect experience on desktop, tablet, and mobile
+### 🧪 **Phase 2: Mental Health Assessment**
+| Feature | Description |
+|---------|-------------|
+| **F005** DASS-21 Assessment | Depression, Anxiety, Stress screening tool |
+| **F006** Assessment Results | Visual severity display with color coding |
+| **F007** User Onboarding | First-time user flow with guided assessment |
 
-### 🛠️ **Developer-Friendly**
-- **TypeScript:** Full type safety and excellent developer experience
-- **Modern Stack:** React 18, Vite, Tailwind CSS, Framer Motion
-- **Component Library:** Radix UI components with custom styling
-- **Build Optimization:** Code splitting, tree shaking, and asset optimization
+### 💬 **Phase 3: AI Therapy Chat**
+| Feature | Description |
+|---------|-------------|
+| **F008** WebLLM Chat | Local AI conversations (Qwen2.5-0.5B/1.5B) |
+| **F009** DASS-21 Context | Personalized responses based on assessment |
+| **F010** Chat History | Persistent sessions with smart memory |
+| **F011** Typing Indicators | Real-time AI thinking animations |
+
+### 🎙️ **Phase 4: Voice Therapy**
+| Feature | Description |
+|---------|-------------|
+| **F012** Whisper STT | Speech-to-text using Transformers.js |
+| **F013** Piper TTS | Text-to-speech with 5 ASMR voices |
+| **F014** Voice Visualizer | Audio waveform animations |
+| **F015** Voice Selector | Choose from Amy, Aurora, Luna, Nova, Willow |
+| **F016** Voice Session | Push-to-talk therapy conversation flow |
+
+### 📓 **Phase 5: Journaling**
+| Feature | Description |
+|---------|-------------|
+| **F017** Journal Editor | Rich text entry with auto-save |
+| **F018** AI Analysis | Mood, sentiment, stress detection |
+| **F019** Journal History | Searchable entries with filters |
+| **F020** Entry Details | Detailed analysis per journal entry |
+
+### 📊 **Phase 6: Dashboard & Analytics**
+| Feature | Description |
+|---------|-------------|
+| **F021** Stats Overview | Total entries, average mood, trends |
+| **F022** Mood Charts | Area chart for sentiment over time |
+| **F023** Emotion Distribution | Pie chart for emotion breakdown |
+| **F024** Stress Levels | Bar chart for stress patterns |
+| **F025** DASS-21 Progress | Assessment baseline display |
+
+### 📄 **Phase 7: Reports & Export**
+| Feature | Description |
+|---------|-------------|
+| **F026** PDF Reports | Generate comprehensive mental health PDF |
+| **F027** Data Export | Export as JSON or CSV for backup |
 
 ## 🏗️ Architecture
 
 ```
-Mindscribe/
-├── client/                 # React frontend application
-│   ├── src/
-│   │   ├── components/     # Reusable UI components
-│   │   │   ├── chat/       # Chat interface components
-│   │   │   ├── navigation/ # Sidebar and model selector
-│   │   │   └── ui/         # Base UI components
-│   │   ├── hooks/          # Custom React hooks
-│   │   ├── services/       # WebLLM service integration
-│   │   ├── types/          # TypeScript type definitions
-│   │   └── pages/          # Application pages
-│   ├── public/             # Static assets
-│   └── dist/               # Production build output
-├── vercel.json             # Vercel deployment configuration
-└── README.md
+MindScribe/
+├── src/
+│   ├── components/
+│   │   ├── auth/           # Authentication components
+│   │   ├── chat/           # Chat interface & history
+│   │   ├── layout/         # AppLayout, navigation
+│   │   ├── navigation/     # Sidebar, model selector
+│   │   └── ui/             # Shadcn/ui components
+│   ├── contexts/
+│   │   └── AuthContext.tsx # Authentication state
+│   ├── hooks/
+│   │   ├── use-chat.tsx    # Chat state management
+│   │   ├── use-chat-session.ts # Session persistence
+│   │   ├── use-voice.ts    # Voice therapy hook
+│   │   └── use-persistent-chat.ts # Memory management
+│   ├── pages/
+│   │   ├── login.tsx       # Authentication
+│   │   ├── assessment.tsx  # DASS-21 screening
+│   │   ├── chat.tsx        # AI therapy chat
+│   │   ├── voice.tsx       # Voice therapy
+│   │   ├── journal.tsx     # Mood journaling
+│   │   ├── dashboard.tsx   # Analytics dashboard
+│   │   └── reports.tsx     # Export & reports
+│   ├── services/
+│   │   ├── auth-service.ts          # User authentication
+│   │   ├── storage-service.ts       # Encrypted storage
+│   │   ├── webllm-service.ts        # Local AI models
+│   │   ├── voice-service.ts         # Whisper STT + Piper TTS
+│   │   ├── journal-service.ts       # Journal management
+│   │   ├── chat-memory-service.ts   # Session persistence
+│   │   ├── mental-health-prompt-service.ts # DASS-21 prompts
+│   │   └── report-service.ts        # PDF/JSON/CSV export
+│   └── types/
+│       └── schema.ts       # TypeScript definitions
+├── public/
+│   └── wasm/               # ONNX & Piper WASM files
+└── vite.config.ts
 ```
 
-**Tech Stack:**
-- **Frontend:** React 18.3 + TypeScript + Vite
-- **Styling:** Tailwind CSS + Radix UI
-- **Animations:** Framer Motion
-- **AI Engine:** WebLLM (Browser-based inference)
-- **Deployment:** Vercel/Netlify ready
+## 🛠️ Tech Stack
+
+| Category | Technology |
+|----------|------------|
+| **Frontend** | React 18.3, TypeScript 5.0, Vite 5.4 |
+| **Styling** | Tailwind CSS, Shadcn/ui, Framer Motion |
+| **AI Chat** | WebLLM (Qwen2.5-0.5B-Instruct, Qwen2.5-1.5B) |
+| **Speech-to-Text** | Whisper Tiny EN (Transformers.js, q8) |
+| **Text-to-Speech** | Piper WASM + espeak-ng phonemizer |
+| **Storage** | LocalForage + Web Crypto API (AES-GCM) |
+| **Charts** | Recharts (Area, Bar, Pie, Line charts) |
+| **PDF Export** | jsPDF + jspdf-autotable |
+| **Deployment** | Vercel, Netlify, GitHub Pages |
 
 ## 🚀 Quick Start
 
 ### Option 1: Deploy to Vercel (Recommended)
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/ErDashrath/Mindscribe)
-
-1. Click the deploy button above
-2. Fork the repository to your GitHub
-3. Vercel will automatically deploy your app
-4. Visit your deployed URL and start chatting!
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/ErDashrath/EchoLearn)
 
 ### Option 2: Local Development
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/ErDashrath/Mindscribe.git
-   cd Mindscribe/client
-   ```
+```bash
+# Clone the repository
+git clone https://github.com/ErDashrath/EchoLearn.git
+cd EchoLearn
 
-2. **Install dependencies:**
-   ```bash
-   npm install
-   ```
+# Install dependencies
+npm install
 
-3. **Start development server:**
-   ```bash
-   npm run dev
-   ```
+# Start development server
+npm run dev
 
-4. **Open in browser:**
-   ```
-   http://localhost:5173
-   ```
+# Open in browser
+# http://localhost:5173
+```
+
+### Option 3: Production Build
+
+```bash
+# Build for production
+npm run build
+
+# Preview production build
+npm run preview
+```
 
 ## 📱 Browser Compatibility
 
-| Browser | Support | WebGPU | Performance |
-|---------|---------|--------|-------------|
-| **Chrome 113+** | ✅ Full | ✅ Yes | ⭐⭐⭐⭐⭐ |
-| **Edge 113+** | ✅ Full | ✅ Yes | ⭐⭐⭐⭐⭐ |
-| **Firefox 110+** | ✅ Full | ⚠️ CPU Only | ⭐⭐⭐⭐ |
-| **Safari 16.4+** | ✅ Full | ⚠️ CPU Only | ⭐⭐⭐⭐ |
-| **Mobile Chrome** | ✅ Full | ✅ Yes | ⭐⭐⭐⭐ |
-| **Mobile Safari** | ✅ Full | ⚠️ CPU Only | ⭐⭐⭐ |
+| Browser | Support | WebGPU | Voice | Performance |
+|---------|---------|--------|-------|-------------|
+| **Chrome 113+** | ✅ Full | ✅ Yes | ✅ Yes | ⭐⭐⭐⭐⭐ |
+| **Edge 113+** | ✅ Full | ✅ Yes | ✅ Yes | ⭐⭐⭐⭐⭐ |
+| **Firefox 110+** | ✅ Full | ⚠️ CPU | ✅ Yes | ⭐⭐⭐⭐ |
+| **Safari 16.4+** | ✅ Full | ⚠️ CPU | ✅ Yes | ⭐⭐⭐ |
+| **Mobile Chrome** | ✅ Full | ✅ Yes | ✅ Yes | ⭐⭐⭐⭐ |
 
 ## 🎯 How to Use
 
-### 1. **Download a Model**
-- Open the sidebar (hamburger menu)
-- Browse available AI models
-- Click "Download" on your preferred model
-- Wait for download to complete
+### 1. **Create Account & Login**
+- Register with username and password
+- Credentials are encrypted and stored locally
+- No email verification required
 
-### 2. **Activate Model**
-- Click "Activate" next to your downloaded model
-- The model will appear in the top-right navbar
-- You're ready to start chatting!
+### 2. **Complete DASS-21 Assessment**
+- 21-question mental health screening
+- Measures Depression, Anxiety, and Stress
+- Results personalize your AI companion
 
-### 3. **Customize AI Behavior**
-- Click the gear icon in the chat input
-- Toggle "Use Custom Prompt"
-- Write your own AI personality
-- Save & Apply for instant changes
+### 3. **Chat with AI Therapist**
+- Open the Chat page from sidebar
+- Download and activate an AI model
+- Start conversations with personalized support
 
-### 4. **Start Conversations**
-- Type your message in the chat input
-- AI responses are generated locally
-- No internet required after model download!
+### 4. **Voice Therapy Sessions**
+- Navigate to Voice Therapy page
+- Select your preferred ASMR voice
+- Hold the microphone button to speak
+- AI responds with soothing voice
 
-## 🔧 Available Models
+### 5. **Daily Journaling**
+- Write your thoughts and feelings
+- AI analyzes mood, sentiment, and emotions
+- Track patterns over time
 
-| Model | Size | Speed | Quality | Best For |
-|-------|------|--------|---------|----------|
-| **Llama 3.2 1B** | 1.2GB | ⚡⚡⚡ | ⭐⭐⭐ | Quick responses, mobile |
-| **Llama 3.2 3B** | 2.0GB | ⚡⚡ | ⭐⭐⭐⭐ | Balanced performance |
-| **Phi-3 Mini** | 2.2GB | ⚡⚡ | ⭐⭐⭐⭐ | Efficient reasoning |
+### 6. **View Dashboard**
+- See mood trends and statistics
+- Emotion distribution charts
+- Stress level patterns
+- DASS-21 baseline comparison
 
-## 🎨 Features Showcase
+### 7. **Export Reports**
+- Generate PDF mental health summary
+- Export data as JSON for backup
+- Export journal entries as CSV
 
-### **Smart Model Management**
-- Download models directly in browser
-- Activate/deactivate with one click
-- Visual indicators for active models
-- Efficient caching system
+## 🎙️ Voice Therapy Voices
 
-### **Natural Conversations**
-- Customizable AI personalities
-- No restrictive prompts by default
-- System prompt manager for advanced users
-- Conversational and engaging responses
+| Voice | Style | Best For |
+|-------|-------|----------|
+| **Amy** | Warm, nurturing | General support |
+| **Aurora** | Gentle, calming | Anxiety relief |
+| **Luna** | Soft, soothing | Sleep & relaxation |
+| **Nova** | Clear, reassuring | Guided exercises |
+| **Willow** | Whispery, ASMR | Deep relaxation |
 
-### **Optimized UI/UX**
-- Chat boxes with perfect width
-- Hidden scrollbars with full functionality
-- Smooth animations and transitions
-- Responsive design for all devices
+## 🔧 Available AI Models
 
-## 🚀 Deployment
+| Model | Size | Speed | Quality | Memory |
+|-------|------|-------|---------|--------|
+| **Qwen2.5-0.5B** | 500MB | ⚡⚡⚡ | ⭐⭐⭐ | 2GB |
+| **Qwen2.5-1.5B** | 1.5GB | ⚡⚡ | ⭐⭐⭐⭐ | 4GB |
+| **Llama 3.2 1B** | 1.2GB | ⚡⚡⚡ | ⭐⭐⭐ | 3GB |
+| **Llama 3.2 3B** | 2.0GB | ⚡⚡ | ⭐⭐⭐⭐ | 6GB |
 
-### Vercel (Recommended)
-The project is pre-configured for Vercel deployment:
+## 🔒 Privacy & Security
 
-```json
-{
-  "buildCommand": "cd client && npm ci && npm run build",
-  "outputDirectory": "client/dist",
-  "installCommand": "cd client && npm ci"
-}
-```
+MindScribe is built with privacy as the core principle:
 
-### Other Platforms
-- **Netlify:** Deploy the `client/dist` folder
-- **GitHub Pages:** Build and deploy static assets
-- **Cloudflare Pages:** Connect your repository for automatic deployments
+- **🚫 No Data Collection:** Zero telemetry, no analytics, no tracking
+- **🔐 Local Encryption:** AES-GCM encryption for all stored data
+- **💻 Browser-Only:** All AI runs in your browser via WebGPU/WASM
+- **📵 Fully Offline:** Works without internet after setup
+- **🗑️ Your Control:** Delete all data anytime from settings
+
+## 📊 DASS-21 Severity Levels
+
+| Score Range | Depression | Anxiety | Stress |
+|-------------|------------|---------|--------|
+| **Normal** | 0-9 | 0-7 | 0-14 |
+| **Mild** | 10-13 | 8-9 | 15-18 |
+| **Moderate** | 14-20 | 10-14 | 19-25 |
+| **Severe** | 21-27 | 15-19 | 26-33 |
+| **Extremely Severe** | 28+ | 20+ | 34+ |
 
 ## 🛠️ Development
 
 ### Available Scripts
 
 ```bash
-# Development
-npm run dev          # Start development server
-npm run build        # Build for production
-npm run preview      # Preview production build
-
-# Quality
-npm run type-check   # TypeScript type checking
-npm run lint         # ESLint checking
+npm run dev        # Start development server
+npm run build      # Build for production
+npm run preview    # Preview production build
+npm run lint       # Run ESLint
+npx tsc --noEmit   # TypeScript type checking
 ```
 
-### Project Scripts
-```bash
-# Install dependencies
-npm install
+### Project Structure
 
-# Start development
-npm run dev
-
-# Build for production
-npm run build
-
-# Preview build
-npm run preview
 ```
-
-## 🎯 Customization
-
-### **System Prompts Examples**
-
-**Casual Friend:**
+src/
+├── components/    # Reusable UI components
+├── contexts/      # React context providers
+├── hooks/         # Custom React hooks
+├── pages/         # Application pages
+├── services/      # Business logic & APIs
+└── types/         # TypeScript definitions
 ```
-You are a casual and friendly AI who loves to chat about anything. Be curious, ask follow-up questions, and share interesting facts or perspectives.
-```
-
-**Creative Assistant:**
-```
-You're a creative and imaginative AI who loves brainstorming ideas, writing, and artistic discussions. Be enthusiastic and inspiring.
-```
-
-**Technical Expert:**
-```
-Act as a knowledgeable technical expert who can explain complex topics clearly. Ask clarifying questions and provide detailed explanations.
-```
-
-## � Privacy & Security
-
-- **No Data Collection:** Everything runs locally in your browser
-- **No API Keys:** No external AI services required
-- **No Server Dependency:** Works completely offline after initial setup
-- **Cross-Origin Headers:** Properly configured for security
-- **Local Storage:** Models and data stored only on your device
-
-## 🤝 Contributing
-
-We welcome contributions! Here's how to get started:
-
-1. **Fork the repository**
-2. **Create a feature branch:** `git checkout -b feature/amazing-feature`
-3. **Make your changes**
-4. **Commit your changes:** `git commit -m 'Add amazing feature'`
-5. **Push to the branch:** `git push origin feature/amazing-feature`
-6. **Open a Pull Request**
-
-### Development Guidelines
-
-- Use TypeScript for all new code
-- Follow the existing code style
-- Add tests for new features
-- Update documentation as needed
-
-## 📊 Performance
-
-- **Initial Load:** ~2-3 seconds
-- **Model Download:** 1-5 minutes (one-time)
-- **Response Time:** 1-3 seconds (depending on model)
-- **Memory Usage:** 2-8GB (depending on model)
-- **Storage:** Models cached locally for instant reuse
 
 ## 🐛 Troubleshooting
 
-### **Model Won't Download**
-- Check browser compatibility (WebGPU support)
-- Ensure sufficient storage space
-- Try a smaller model first
+### **AI Model Won't Load**
+- Ensure WebGPU is enabled in browser
+- Try a smaller model (Qwen2.5-0.5B)
+- Check available memory (4GB+ recommended)
+
+### **Voice Not Working**
+- Allow microphone permissions
+- Check browser audio settings
+- Voice models download on first use (~20MB)
 
 ### **Slow Performance**
-- Enable WebGPU in browser settings
-- Close other tabs to free memory
-- Try a smaller model
+- Use Chrome/Edge for best WebGPU support
+- Close other memory-heavy tabs
+- Use smaller AI model
 
-### **Chat Not Working**
-- Activate a model first
-- Check browser console for errors
-- Refresh the page
+### **Data Not Saving**
+- Check localStorage availability
+- Clear browser cache and retry
+- Ensure cookies are enabled
+
+## 🤝 Contributing
+
+Contributions are welcome! Please follow these steps:
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Commit your changes: `git commit -m 'Add amazing feature'`
+4. Push to the branch: `git push origin feature/amazing-feature`
+5. Open a Pull Request
 
 ## 📄 License
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
 
+## ⚠️ Disclaimer
+
+MindScribe is an AI-powered wellness tool and **NOT a substitute for professional mental health care**. If you're experiencing a mental health crisis, please contact:
+
+- **National Suicide Prevention Lifeline:** 988 (US)
+- **Crisis Text Line:** Text HOME to 741741
+- **International Association for Suicide Prevention:** https://www.iasp.info/resources/Crisis_Centres/
+
 ## 🙏 Acknowledgments
 
-- **WebLLM Team** for browser-based AI inference
-- **Radix UI** for accessible component primitives
-- **Tailwind CSS** for utility-first styling
-- **Framer Motion** for beautiful animations
+- **WebLLM** - Browser-based LLM inference
+- **Transformers.js** - Whisper speech recognition
+- **Piper** - Neural text-to-speech
+- **Shadcn/ui** - Beautiful UI components
+- **Recharts** - Data visualization
+- **jsPDF** - PDF generation
 
 ---
 
 <div align="center">
 
-**Built with ❤️ by [Dashrath](https://github.com/ErDashrath)**
+**Built with ❤️ for Mental Wellness by [Dashrath](https://github.com/ErDashrath)**
 
-[⭐ Star this repo](https://github.com/ErDashrath/Mindscribe) | [🐛 Report Bug](https://github.com/ErDashrath/Mindscribe/issues) | [💡 Request Feature](https://github.com/ErDashrath/Mindscribe/issues)
+[⭐ Star this repo](https://github.com/ErDashrath/EchoLearn) | [🐛 Report Bug](https://github.com/ErDashrath/EchoLearn/issues) | [💡 Request Feature](https://github.com/ErDashrath/EchoLearn/issues)
 
 </div>
