@@ -87,7 +87,7 @@ export function InputArea({
         </div>
 
         {/* Input Container */}
-        <div className="relative bg-gray-800 rounded-3xl border border-gray-700 shadow-2xl overflow-hidden">
+        <div className="relative bg-dark-bg-secondary rounded-3xl border border-dark-border shadow-2xl overflow-hidden">
           <div className="flex items-end p-4 gap-3">
             <div className="flex-1">
               <textarea
@@ -98,7 +98,7 @@ export function InputArea({
                 placeholder={placeholder}
                 disabled={disabled}
                 rows={1}
-                className="w-full bg-transparent text-white placeholder-gray-400 border-none outline-none resize-none text-lg leading-relaxed min-h-[56px] max-h-[200px]"
+                className="w-full bg-transparent text-dark-text placeholder-dark-text-secondary border-none outline-none resize-none text-lg leading-relaxed min-h-[56px] max-h-[200px]"
                 style={{ height: 'auto' }}
               />
             </div>
@@ -107,7 +107,7 @@ export function InputArea({
               <Button
                 variant="ghost"
                 size="icon"
-                className="text-gray-400 hover:text-white hover:bg-gray-700 rounded-full"
+                className="text-dark-text-secondary hover:text-dark-text hover:bg-dark-bg-secondary/80 rounded-full"
               >
                 <Paperclip className="h-5 w-5" />
               </Button>
@@ -139,7 +139,7 @@ export function InputArea({
 
   // Regular chat input (compact version)
   return (
-    <div className="relative bg-gray-800 rounded-2xl border border-gray-700 shadow-lg">
+    <div className="relative bg-dark-bg-secondary rounded-2xl border border-dark-border shadow-lg">
       <div className="flex items-end p-3 gap-2">
         <div className="flex-1">
           <textarea
@@ -150,7 +150,7 @@ export function InputArea({
             placeholder={placeholder}
             disabled={disabled}
             rows={1}
-            className="w-full bg-transparent text-white placeholder-gray-400 border-none outline-none resize-none leading-relaxed min-h-[40px] max-h-[120px]"
+            className="w-full bg-transparent text-dark-text placeholder-dark-text-secondary border-none outline-none resize-none leading-relaxed min-h-[40px] max-h-[120px]"
           />
         </div>
         
@@ -159,7 +159,7 @@ export function InputArea({
             variant="ghost"
             size="sm"
             onClick={handleVoiceClick}
-            className={`text-gray-400 hover:text-white hover:bg-gray-700 rounded-full w-8 h-8 p-0 ${
+            className={`text-dark-text-secondary hover:text-dark-text hover:bg-dark-bg-secondary/80 rounded-full w-8 h-8 p-0 ${
               isListening ? 'text-red-400' : ''
             }`}
           >

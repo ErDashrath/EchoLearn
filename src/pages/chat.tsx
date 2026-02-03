@@ -141,9 +141,9 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col">
+    <div className="min-h-screen bg-dark-bg text-dark-text flex flex-col">
       {/* Header with Hamburger Menu */}
-      <header className={`flex items-center justify-between p-4 border-b border-gray-800 transition-all duration-300 ${showSidebar ? 'ml-80' : ''}`}>
+      <header className={`flex items-center justify-between p-4 border-b border-dark-border transition-all duration-300 ${showSidebar ? 'ml-80' : ''}`}>
         <div className="flex items-center space-x-4">
           <HamburgerMenu onClick={toggleSidebar} isOpen={showSidebar} />
           <div className="flex items-center space-x-2">
@@ -153,12 +153,12 @@ export default function ChatPage() {
             <span className="font-semibold text-lg">MindScribe</span>
             {/* F009: Show personalization badge when DASS-21 is active */}
             {dass21Results ? (
-              <span className="text-xs text-emerald-400 bg-emerald-900/30 px-2 py-1 rounded flex items-center gap-1">
+              <span className="text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/30 px-2 py-1 rounded flex items-center gap-1">
                 <Brain className="h-3 w-3" />
                 Personalized
               </span>
             ) : (
-              <span className="text-sm text-gray-400 bg-gray-800 px-2 py-1 rounded">Your Therapist</span>
+              <span className="text-sm text-dark-text-secondary bg-dark-bg-secondary px-2 py-1 rounded">Your Therapist</span>
             )}
           </div>
         </div>
@@ -187,8 +187,8 @@ export default function ChatPage() {
             variant="ghost"
             size="icon"
             onClick={() => toggleTTS(!ttsEnabled)}
-            className={`h-10 w-10 rounded-lg hover:bg-gray-800 ${
-              ttsEnabled ? 'text-blue-400 bg-blue-900/20' : 'text-gray-400'
+            className={`h-10 w-10 rounded-lg hover:bg-dark-bg-secondary ${
+              ttsEnabled ? 'text-blue-400 bg-blue-900/20' : 'text-dark-text-secondary'
             }`}
           >
             {ttsEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
@@ -198,7 +198,7 @@ export default function ChatPage() {
             variant="ghost"
             size="icon"
             onClick={toggleTheme}
-            className="h-10 w-10 rounded-lg hover:bg-gray-800 text-gray-400"
+            className="h-10 w-10 rounded-lg hover:bg-dark-bg-secondary text-dark-text-secondary"
           >
             {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
@@ -218,7 +218,7 @@ export default function ChatPage() {
               <h1 className="text-4xl font-normal mb-4 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
                 {getPersonalizedGreeting()}
               </h1>
-              <p className="text-gray-400 text-lg">
+              <p className="text-dark-text-secondary text-lg">
                 {dass21Results 
                   ? "I'm here with personalized support based on your assessment. How are you feeling today?"
                   : "How are you feeling today? I'm here to listen, understand, and support you through anything."}
@@ -260,28 +260,28 @@ export default function ChatPage() {
               <div className="flex flex-wrap gap-3 mt-6 justify-center">
                 <Button
                   variant="outline"
-                  className="bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700 hover:text-white"
+                  className="bg-dark-bg-secondary border-dark-border text-dark-text-secondary hover:bg-dark-bg-secondary/80 hover:text-dark-text"
                   onClick={() => sendMessage("I'm feeling anxious and need someone to talk to")}
                 >
                   Feeling Anxious
                 </Button>
                 <Button
                   variant="outline"
-                  className="bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700 hover:text-white"
+                  className="bg-dark-bg-secondary border-dark-border text-dark-text-secondary hover:bg-dark-bg-secondary/80 hover:text-dark-text"
                   onClick={() => sendMessage("I'm dealing with stress and need coping strategies")}
                 >
                   Managing Stress
                 </Button>
                 <Button
                   variant="outline"
-                  className="bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700 hover:text-white"
+                  className="bg-dark-bg-secondary border-dark-border text-dark-text-secondary hover:bg-dark-bg-secondary/80 hover:text-dark-text"
                   onClick={() => sendMessage("I need help processing my emotions today")}
                 >
                   Process Emotions
                 </Button>
                 <Button
                   variant="outline"
-                  className="bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700 hover:text-white"
+                  className="bg-dark-bg-secondary border-dark-border text-dark-text-secondary hover:bg-dark-bg-secondary/80 hover:text-dark-text"
                   onClick={() => sendMessage("I want to talk about my relationships and get advice")}
                 >
                   Relationship Support

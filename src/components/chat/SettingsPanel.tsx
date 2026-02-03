@@ -31,23 +31,6 @@ interface SettingsPanelProps {
   onModelSelect?: (modelId: string) => void;
 }
 
-interface SettingsPanelProps {
-  isOpen: boolean;
-  onClose: () => void;
-  mode: ChatMode;
-  focus: FocusMode;
-  onModeChange: (mode: ChatMode) => void;
-  onFocusChange: (focus: FocusMode) => void;
-  onExportChat: (format: 'txt' | 'md' | 'json') => void;
-  ttsEnabled: boolean;
-  onTTSToggle: (enabled: boolean) => void;
-  stats?: {
-    messagesSent: number;
-    grammarImprovements: number;
-    speakingTime: string;
-  };
-}
-
 export function SettingsPanel({
   isOpen,
   onClose,
@@ -63,8 +46,6 @@ export function SettingsPanel({
     grammarImprovements: 0,
     speakingTime: "0 min"
   },
-  webllmEnabled = false,
-  onWebLLMToggle,
   selectedModel,
   onModelSelect
 }: SettingsPanelProps) {
@@ -104,10 +85,6 @@ export function SettingsPanel({
     }
   };
 
-  const handleWebLLMToggle = () => {
-    onWebLLMToggle?.(!webllmEnabled);
-  };
-
   return (
     <AnimatePresence>
       {isOpen && (
@@ -126,7 +103,7 @@ export function SettingsPanel({
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ type: "spring", damping: 20 }}
-            className="ml-auto w-80 bg-white dark:bg-gray-900 shadow-2xl border-l border-gray-200 dark:border-gray-700 flex flex-col relative z-10 h-full"
+            className="ml-auto w-80 bg-dark-bg shadow-2xl border-l border-dark-border flex flex-col relative z-10 h-full"
           >
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b">
@@ -228,7 +205,7 @@ export function SettingsPanel({
                             {Math.round(downloadProgress.progress * 100)}%
                           </span>
                         </div>
-                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                        <div className="w-full bg-dark-border rounded-full h-2">
                           <div 
                             className="bg-blue-500 h-2 rounded-full transition-all duration-300"
                             style={{ width: `${downloadProgress.progress * 100}%` }}
@@ -249,7 +226,7 @@ export function SettingsPanel({
                             className={`p-3 border rounded-lg transition-all ${
                               isSelected 
                                 ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' 
-                                : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                                : 'border-dark-border hover:border-dark-border/80'
                             }`}
                           >
                             <div className="flex items-start justify-between">

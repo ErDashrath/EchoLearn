@@ -170,7 +170,7 @@ export function MessageBubble({ message, onRegenerate, isRegenerating }: Message
     >
       {!isUser && (
         <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-blue-500 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg">
-          <Bot className="h-5 w-5 text-white" />
+          <Bot className="h-5 w-5 text-dark-text" />
         </div>
       )}
 
@@ -178,8 +178,8 @@ export function MessageBubble({ message, onRegenerate, isRegenerating }: Message
         <div 
           className={`px-6 py-4 shadow-lg hover-lift ${
             isUser 
-              ? "user-bubble rounded-3xl rounded-tr-lg text-gray-800 dark:text-gray-100" 
-              : "ai-bubble rounded-3xl rounded-tl-lg"
+              ? "user-bubble rounded-3xl rounded-tr-lg text-dark-text" 
+              : "ai-bubble rounded-3xl rounded-tl-lg text-dark-text"
           }`}
         >
           {isAI ? (
@@ -188,7 +188,7 @@ export function MessageBubble({ message, onRegenerate, isRegenerating }: Message
               className="text-foreground"
             />
           ) : (
-            <p className="leading-relaxed text-gray-800 dark:text-gray-100">
+            <p className="leading-relaxed text-dark-text">
               {renderMessageWithSuggestions(message.content, message.grammarSuggestions || [])}
             </p>
           )}
@@ -210,7 +210,7 @@ export function MessageBubble({ message, onRegenerate, isRegenerating }: Message
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-xs h-auto p-1 text-gray-600 hover:text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                className="text-xs h-auto p-1 text-dark-text-secondary hover:text-dark-text hover:bg-dark-bg-secondary/50"
                 onClick={handleCopy}
               >
                 {isCopied ? (
@@ -315,7 +315,7 @@ export function MessageBubble({ message, onRegenerate, isRegenerating }: Message
 
       {isUser && (
         <div className="w-10 h-10 bg-gradient-to-br from-gray-400 to-gray-600 dark:from-gray-500 dark:to-gray-700 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg">
-          <User className="h-5 w-5 text-white" />
+          <User className="h-5 w-5 text-dark-text" />
         </div>
       )}
     </motion.div>

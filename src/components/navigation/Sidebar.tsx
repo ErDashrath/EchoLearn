@@ -238,16 +238,16 @@ export function Sidebar({
             animate={{ x: 0 }}
             exit={{ x: "-100%" }}
             transition={{ type: "spring", damping: 20 }}
-            className="relative w-80 bg-gray-900 shadow-2xl border-r border-gray-800 flex flex-col h-full z-10"
+            className="relative w-80 bg-dark-bg shadow-2xl border-r border-dark-border flex flex-col h-full z-10"
             style={{ boxShadow: '2px 0 15px rgba(0, 0, 0, 0.2)' }}
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-gray-800">
+            <div className="flex items-center justify-between p-4 border-b border-dark-border">
               <div className="flex items-center space-x-3">
                 <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
                   <Brain className="h-4 w-4 text-white" />
                 </div>
-                <h2 className="text-lg font-semibold text-white">
+                <h2 className="text-lg font-semibold text-dark-text">
                   AI Control Panel
                 </h2>
               </div>
@@ -255,17 +255,17 @@ export function Sidebar({
                 variant="ghost"
                 size="icon"
                 onClick={onClose}
-                className="h-8 w-8 text-gray-400 hover:text-white hover:bg-gray-800"
+                className="h-8 w-8 text-dark-text-secondary hover:text-dark-text hover:bg-dark-bg-secondary"
               >
                 <X className="h-4 w-4" />
               </Button>
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto scroll-hidden scroll-smooth p-4 space-y-6 bg-gray-900">
+            <div className="flex-1 overflow-y-auto scroll-hidden scroll-smooth p-4 space-y-6 bg-dark-bg">
               
               {/* WebLLM - Main Feature */}
-              <Card className="border-gray-800 bg-gray-800/50">
+              <Card className="border-dark-border bg-dark-bg-secondary/50">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2 text-white">
                     <Brain className="h-5 w-5 text-blue-400" />

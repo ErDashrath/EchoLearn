@@ -218,7 +218,19 @@ If the user expresses thoughts of self-harm or suicide:
    * Build DASS-21 context section
    */
   private buildDASS21Context(results: DASS21Results): string {
+    // Validate that results has the expected structure
+    if (!results || !results.severityLevels || !results.scores) {
+      return `\n\n## Note:
+Unable to load personalized mental health context. Please retake the DASS-21 assessment for personalized support.`;
+    }
+
     const { scores, severityLevels } = results;
+    
+    // Additional validation for nested properties
+    if (!severityLevels.depression || !severityLevels.anxiety || !severityLevels.stress) {
+      return `\n\n## Note:
+Unable to load complete mental health context. Please retake the DASS-21 assessment for personalized support.`;
+    }
     
     let context = `\n\n## User's Mental Health Context (from DASS-21 Assessment):`;
     context += `\n\nAssessment completed: ${new Date(results.completedAt).toLocaleDateString()}`;
@@ -251,15 +263,20 @@ If the user expresses thoughts of self-harm or suicide:
    * Build recommended coping strategies based on severity
    */
   private buildCopingStrategies(severityLevels: DASS21Results['severityLevels']): string {
+    // Validate that severityLevels has the expected structure
+    if (!severityLevels || !severityLevels.depression || !severityLevels.anxiety || !severityLevels.stress) {
+      return '';
+    }
+
     const strategies: string[] = [];
     
-    if (severityLevels.depression.level !== 'Normal') {
+    if (severityLevels.depression?.level !== 'Normal') {
       strategies.push(...COPING_STRATEGIES.depression.slice(0, 2));
     }
-    if (severityLevels.anxiety.level !== 'Normal') {
+    if (severityLevels.anxiety?.level !== 'Normal') {
       strategies.push(...COPING_STRATEGIES.anxiety.slice(0, 2));
     }
-    if (severityLevels.stress.level !== 'Normal') {
+    if (severityLevels.stress?.level !== 'Normal') {
       strategies.push(...COPING_STRATEGIES.stress.slice(0, 2));
     }
     
@@ -351,11 +368,11 @@ Respond with extra care:
     
     let message = `${greeting}${name}! I'm here to listen and support you.`;
     
-    if (dass21Results) {
+    if (dass21Results && dass21Results.severityLevels) {
       const hasElevated = 
-        dass21Results.severityLevels.depression.level !== 'Normal' ||
-        dass21Results.severityLevels.anxiety.level !== 'Normal' ||
-        dass21Results.severityLevels.stress.level !== 'Normal';
+        dass21Results.severityLevels.depression?.level !== 'Normal' ||
+        dass21Results.severityLevels.anxiety?.level !== 'Normal' ||
+        dass21Results.severityLevels.stress?.level !== 'Normal';
       
       if (hasElevated) {
         message += ' How are you feeling today?';
