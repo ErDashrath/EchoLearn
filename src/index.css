@@ -29,6 +29,18 @@
   --gradient-end: hsl(210, 80%, 94%);
   --user-bubble: hsl(220, 20%, 92%);
   --ai-bubble: hsl(252, 40%, 98%);
+  
+  /* Additional theme-aware colors for dark-style components */
+  --dark-bg: hsl(240, 25%, 12%);
+  --dark-bg-secondary: hsl(240, 20%, 18%);
+  --dark-border: hsl(240, 15%, 25%);
+  --dark-text: hsl(0, 0%, 98%);
+  --dark-text-secondary: hsl(240, 15%, 65%);
+  
+  /* Translucent overlay colors */
+  --overlay-bg: rgba(0, 0, 0, 0.03);
+  --overlay-bg-hover: rgba(0, 0, 0, 0.06);
+  --overlay-border: rgba(0, 0, 0, 0.08);
 }
 
 .dark {
@@ -58,6 +70,31 @@
   --gradient-end: hsl(250, 30%, 12%);
   --user-bubble: hsl(240, 15%, 18%);
   --ai-bubble: hsl(240, 15%, 14%);
+  
+  /* Dark-style colors remain the same in dark mode */
+  --dark-bg: hsl(240, 15%, 8%);
+  --dark-bg-secondary: hsl(240, 12%, 12%);
+  --dark-border: hsl(240, 8%, 22%);
+  --dark-text: hsl(0, 0%, 98%);
+  --dark-text-secondary: hsl(240, 15%, 65%);
+  
+  /* Translucent overlay colors for dark mode */
+  --overlay-bg: rgba(255, 255, 255, 0.05);
+  --overlay-bg-hover: rgba(255, 255, 255, 0.10);
+  --overlay-border: rgba(255, 255, 255, 0.10);
+}
+
+.light {
+  --dark-bg: hsl(240, 25%, 95%);
+  --dark-bg-secondary: hsl(240, 20%, 90%);
+  --dark-border: hsl(240, 15%, 80%);
+  --dark-text: hsl(240, 10%, 10%);
+  --dark-text-secondary: hsl(240, 10%, 40%);
+  
+  /* Translucent overlay colors for light mode */
+  --overlay-bg: rgba(0, 0, 0, 0.03);
+  --overlay-bg-hover: rgba(0, 0, 0, 0.06);
+  --overlay-border: rgba(0, 0, 0, 0.08);
 }
 
 @layer base {

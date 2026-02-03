@@ -123,24 +123,24 @@ export function ModelDownloadPanel({
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className="ml-auto w-96 bg-gray-900 shadow-2xl border-l border-gray-700 flex flex-col relative z-10 h-full"
+            className="ml-auto w-96 bg-dark-bg shadow-2xl border-l border-dark-border flex flex-col relative z-10 h-full"
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-gray-700 bg-gradient-to-r from-purple-900/50 to-blue-900/50">
+            <div className="flex items-center justify-between p-4 border-b border-dark-border bg-gradient-to-r from-purple-900/50 to-blue-900/50">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-blue-600 rounded-xl flex items-center justify-center">
                   <Brain className="h-5 w-5 text-white" />
                 </div>
                 <div>
                   <h2 className="text-lg font-bold text-white">AI Models</h2>
-                  <p className="text-xs text-gray-400">Download & manage local models</p>
+                  <p className="text-xs text-dark-text-secondary">Download & manage local models</p>
                 </div>
               </div>
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={onClose}
-                className="h-8 w-8 text-gray-400 hover:text-white hover:bg-gray-800"
+                className="h-8 w-8 text-dark-text-secondary hover:text-dark-text hover:bg-dark-bg-secondary"
               >
                 <X className="h-5 w-5" />
               </Button>
@@ -153,8 +153,8 @@ export function ModelDownloadPanel({
                 <div className="flex items-start gap-3">
                   <Sparkles className="h-5 w-5 text-blue-400 mt-0.5" />
                   <div>
-                    <h3 className="text-sm font-semibold text-white mb-1">100% Private AI</h3>
-                    <p className="text-xs text-gray-400">
+                    <h3 className="text-sm font-semibold text-dark-text mb-1">100% Private AI</h3>
+                    <p className="text-xs text-dark-text-secondary">
                       Models run locally in your browser. No data sent to servers.
                     </p>
                   </div>
@@ -168,7 +168,7 @@ export function ModelDownloadPanel({
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <Loader2 className="h-4 w-4 animate-spin text-blue-400" />
-                        <span className="text-sm font-medium text-white">
+                        <span className="text-sm font-medium text-dark-text">
                           {downloadProgress.text}
                         </span>
                       </div>
@@ -176,7 +176,7 @@ export function ModelDownloadPanel({
                         {Math.round(downloadProgress.progress * 100)}%
                       </span>
                     </div>
-                    <div className="w-full bg-gray-700 rounded-full h-3">
+                    <div className="w-full bg-dark-border rounded-full h-3">
                       <motion.div 
                         className="bg-gradient-to-r from-blue-500 to-purple-500 h-3 rounded-full"
                         initial={{ width: 0 }}
@@ -190,7 +190,7 @@ export function ModelDownloadPanel({
 
               {/* Models List */}
               <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-dark-text flex items-center gap-2">
                   <Download className="h-4 w-4" />
                   Available Models ({availableModels.length})
                 </h3>
@@ -209,14 +209,14 @@ export function ModelDownloadPanel({
                           ? 'border-purple-500 bg-purple-500/10 shadow-lg shadow-purple-500/20' 
                           : isCached
                           ? 'border-green-500/30 bg-green-900/10'
-                          : 'border-gray-700 bg-gray-800/50 hover:border-gray-600'
+                          : 'border-dark-border bg-dark-bg-secondary/50 hover:border-dark-border/80'
                       }`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <Brain className={`h-4 w-4 ${isActive ? 'text-purple-400' : 'text-gray-400'}`} />
-                            <span className="font-semibold text-white">
+                            <Brain className={`h-4 w-4 ${isActive ? 'text-purple-400' : 'text-dark-text-secondary'}`} />
+                            <span className="font-semibold text-dark-text">
                               {model.name}
                             </span>
                             {isActive && (
@@ -231,18 +231,18 @@ export function ModelDownloadPanel({
                             )}
                           </div>
                           
-                          <p className="text-xs text-gray-400 mb-3">
+                          <p className="text-xs text-dark-text-secondary mb-3">
                             {model.description}
                           </p>
                           
                           <div className="flex items-center gap-4">
                             <div className="flex items-center gap-1">
-                              <HardDrive className="h-3 w-3 text-gray-500" />
-                              <span className="text-xs text-gray-400">{model.size}</span>
+                              <HardDrive className="h-3 w-3 text-dark-text-secondary" />
+                              <span className="text-xs text-dark-text-secondary">{model.size}</span>
                             </div>
                             <div className="flex items-center gap-1">
                               <Zap className="h-3 w-3 text-yellow-500" />
-                              <span className="text-xs text-gray-400">{model.parameters}</span>
+                              <span className="text-xs text-dark-text-secondary">{model.parameters}</span>
                             </div>
                           </div>
                         </div>
@@ -301,8 +301,8 @@ export function ModelDownloadPanel({
             </div>
 
             {/* Footer */}
-            <div className="p-4 border-t border-gray-700 bg-gray-800/50">
-              <div className="flex items-center justify-between text-xs text-gray-500">
+            <div className="p-4 border-t border-dark-border bg-dark-bg-secondary/50">
+              <div className="flex items-center justify-between text-xs text-dark-text-secondary">
                 <span>{cachedModels.length} model(s) downloaded</span>
                 <span>WebLLM Powered</span>
               </div>

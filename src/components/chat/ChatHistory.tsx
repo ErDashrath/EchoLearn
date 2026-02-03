@@ -82,26 +82,26 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
             animate={{ x: 0 }}
             exit={{ x: -320 }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="fixed left-0 top-0 h-full w-80 bg-gray-900 border-r border-gray-800 z-50 flex flex-col"
+            className="fixed left-0 top-0 h-full w-80 bg-dark-bg border-r border-dark-border z-50 flex flex-col"
           >
             {/* Header */}
-            <div className="p-4 border-b border-gray-800 flex items-center justify-between">
+            <div className="p-4 border-b border-dark-border flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <MessageSquare className="h-5 w-5 text-blue-400" />
-                <h2 className="font-semibold text-white">Chat History</h2>
+                <h2 className="font-semibold text-dark-text">Chat History</h2>
               </div>
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={onClose}
-                className="text-gray-400 hover:text-white"
+                className="text-dark-text-secondary hover:text-dark-text"
               >
                 <X className="h-4 w-4" />
               </Button>
             </div>
 
             {/* New Chat Button */}
-            <div className="p-3 border-b border-gray-800">
+            <div className="p-3 border-b border-dark-border">
               <Button
                 onClick={onNewSession}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center gap-2"
@@ -115,11 +115,11 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
             <ScrollArea className="flex-1">
               <div className="p-2 space-y-1">
                 {isLoading ? (
-                  <div className="text-center py-8 text-gray-500">
+                  <div className="text-center py-8 text-dark-text-secondary">
                     Loading sessions...
                   </div>
                 ) : sessions.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
+                  <div className="text-center py-8 text-dark-text-secondary">
                     <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-50" />
                     <p>No chat history yet</p>
                     <p className="text-sm">Start a new conversation</p>
@@ -134,20 +134,20 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
                         group relative p-3 rounded-lg cursor-pointer transition-colors
                         ${currentSessionId === session.id
                           ? 'bg-blue-900/30 border border-blue-800'
-                          : 'hover:bg-gray-800 border border-transparent'
+                          : 'hover:bg-dark-bg-secondary border border-transparent'
                         }
                       `}
                       onClick={() => onSelectSession(session.id)}
                     >
                       {/* Session Title */}
                       <div className="flex items-start justify-between gap-2">
-                        <h3 className="font-medium text-white text-sm truncate flex-1">
+                        <h3 className="font-medium text-dark-text text-sm truncate flex-1">
                           {session.title}
                         </h3>
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-red-400"
+                          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-dark-text-secondary hover:text-red-400"
                           onClick={(e) => {
                             e.stopPropagation();
                             onDeleteSession(session.id);
@@ -158,12 +158,12 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
                       </div>
 
                       {/* Preview */}
-                      <p className="text-xs text-gray-400 mt-1 truncate">
+                      <p className="text-xs text-dark-text-secondary mt-1 truncate">
                         {getSessionPreview(session)}
                       </p>
 
                       {/* Meta info */}
-                      <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
+                      <div className="flex items-center gap-3 mt-2 text-xs text-dark-text-secondary">
                         <span className="flex items-center gap-1">
                           <Clock className="h-3 w-3" />
                           {formatDate(session.updatedAt)}
@@ -186,7 +186,7 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
                           {session.summary.keyTopics.slice(0, 3).map((topic, i) => (
                             <span
                               key={i}
-                              className="text-[10px] px-1.5 py-0.5 bg-gray-800 text-gray-400 rounded"
+                              className="text-[10px] px-1.5 py-0.5 bg-dark-bg-secondary text-dark-text-secondary rounded"
                             >
                               {topic}
                             </span>
@@ -200,7 +200,7 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
             </ScrollArea>
 
             {/* Footer */}
-            <div className="p-3 border-t border-gray-800 text-xs text-gray-500 text-center">
+            <div className="p-3 border-t border-dark-border text-xs text-dark-text-secondary text-center">
               {sessions.length} conversation{sessions.length !== 1 ? 's' : ''} saved locally
             </div>
           </motion.div>
