@@ -223,19 +223,19 @@ export default function ChatPage() {
               )}
 
               {/* F009: Show severity indicators if elevated */}
-              {dass21Results && (
+              {dass21Results && dass21Results.severityLevels && (
                 <div className="flex justify-center gap-2 mt-4">
-                  {dass21Results.severityLevels.depression.level !== 'Normal' && (
+                  {dass21Results.severityLevels.depression?.level !== 'Normal' && (
                     <span className="text-xs px-2 py-1 rounded-full bg-blue-900/30 text-blue-400">
                       Depression Support Active
                     </span>
                   )}
-                  {dass21Results.severityLevels.anxiety.level !== 'Normal' && (
+                  {dass21Results.severityLevels.anxiety?.level !== 'Normal' && (
                     <span className="text-xs px-2 py-1 rounded-full bg-amber-900/30 text-amber-400">
                       Anxiety Support Active
                     </span>
                   )}
-                  {dass21Results.severityLevels.stress.level !== 'Normal' && (
+                  {dass21Results.severityLevels.stress?.level !== 'Normal' && (
                     <span className="text-xs px-2 py-1 rounded-full bg-rose-900/30 text-rose-400">
                       Stress Support Active
                     </span>
