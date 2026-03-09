@@ -147,12 +147,29 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
     try {
       const userSessions = await chatMemoryService.getUserSessions(user.username);
       setSessions(userSessions);
+
+      if (userSessions.length === 0) {
+        setSession(null);
+        setMemoryContext(null);
+        return;
+      }
+
+      const hasActiveSession = session
+        ? userSessions.some(s => s.id === session.id)
+        : false;
+
+      const sessionToLoad = hasActiveSession
+        ? userSessions.find(s => s.id === session!.id) || userSessions[0]
+        : userSessions[0];
+
+      setSession(sessionToLoad);
+      setMemoryContext(chatMemoryService.getMemoryContext(sessionToLoad));
     } catch (error) {
       console.error('Failed to load sessions:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [user?.username]);
+  }, [user?.username, session?.id]);
 
   const createNewSession = useCallback(async () => {
     if (!user?.username) {
@@ -288,17 +305,9 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
     abortControllerRef.current = new AbortController();
 
     try {
-      // Build conversation history with memory context
+      // Build conversation history
       const memory = chatMemoryService.getMemoryContext(currentSession);
       const conversationHistory: { role: string; content: string }[] = [];
-
-      // Include summary context if available
-      if (memory.contextPrompt) {
-        conversationHistory.push({
-          role: 'system',
-          content: memory.contextPrompt,
-        });
-      }
 
       // Add recent messages
       memory.recentMessages.forEach(msg => {
@@ -316,11 +325,15 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
         timeOfDay: mentalHealthPromptService.getTimeOfDay(),
       });
 
+      const memorySystemAddition = memory.contextPrompt
+        ? `\n\n${memory.contextPrompt}`
+        : '';
+
       // Check for crisis signals
       const hasCrisisSignals = mentalHealthPromptService.containsCrisisSignals(content);
       const finalSystemPrompt = hasCrisisSignals
-        ? systemPrompt + mentalHealthPromptService.getCrisisResponseAddition()
-        : systemPrompt;
+        ? systemPrompt + memorySystemAddition + mentalHealthPromptService.getCrisisResponseAddition()
+        : systemPrompt + memorySystemAddition;
 
       // Config for generation
       const config: WebLLMGenerationConfig = {

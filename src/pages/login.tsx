@@ -20,7 +20,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Brain, Shield, Lock, User, Mail, Eye, EyeOff } from 'lucide-react';
+import { Loader2, Brain, Shield, Lock, User, Mail, Eye, EyeOff, AlertCircle } from 'lucide-react';
 
 // =============================================================================
 // ANIMATIONS
@@ -52,7 +52,8 @@ const featureVariants = {
 
 const LoginPage: React.FC = () => {
   const [, setLocation] = useLocation();
-  const { login, register, isAuthenticated, hasCompletedDASS21 } = useAuth();
+  const { login, register, isAuthenticated, hasCompletedDASS21, isLoading: authLoading, getDASS21Results } = useAuth();
+  const initialRedirectCheckedRef = React.useRef(false);
   
   // Form state
   const [isLoginMode, setIsLoginMode] = useState(true);
@@ -69,10 +70,14 @@ const LoginPage: React.FC = () => {
   
   // Redirect if already authenticated
   React.useEffect(() => {
+    // Only auto-redirect once for already-authenticated users visiting /login.
+    if (initialRedirectCheckedRef.current || authLoading) return;
+    initialRedirectCheckedRef.current = true;
+
     if (isAuthenticated) {
       setLocation(hasCompletedDASS21 ? '/' : '/assessment');
     }
-  }, [isAuthenticated, hasCompletedDASS21, setLocation]);
+  }, [isAuthenticated, hasCompletedDASS21, authLoading, setLocation]);
   
   // ---------------------------------------------------------------------------
   // HANDLERS
@@ -96,6 +101,9 @@ const LoginPage: React.FC = () => {
         
         if (!result.success) {
           setError(result.error || 'Login failed');
+        } else {
+          const assessment = await getDASS21Results();
+          setLocation(assessment ? '/' : '/assessment');
         }
       } else {
         // REGISTER
@@ -126,6 +134,8 @@ const LoginPage: React.FC = () => {
         
         if (!result.success) {
           setError(result.error || 'Registration failed');
+        } else {
+          setLocation('/assessment');
         }
       }
     } catch (err) {
@@ -370,6 +380,27 @@ const LoginPage: React.FC = () => {
                           autoComplete="new-password"
                         />
                       </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Registration Warning */}
+                <AnimatePresence>
+                  {!isLoginMode && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                    >
+                      <Alert className="border-amber-300/70 bg-amber-50/80 dark:border-amber-900/60 dark:bg-amber-950/30">
+                        <AlertDescription className="text-xs sm:text-sm text-amber-900 dark:text-amber-200 flex items-start gap-2">
+                          <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                          <span>
+                            Keep your password saved securely. For privacy, this app does not provide password recovery.
+                            If you forget your password, this account cannot be accessed.
+                          </span>
+                        </AlertDescription>
+                      </Alert>
                     </motion.div>
                   )}
                 </AnimatePresence>

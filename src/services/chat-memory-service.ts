@@ -256,9 +256,12 @@ class ChatMemoryService {
     // Build context prompt
     let contextPrompt = '';
 
-    // Add summary if we have older messages
-    if (session.summary && olderMessages.length > 0) {
-      contextPrompt += this.formatSummaryForPrompt(session.summary);
+    if (olderMessages.length > 0) {
+      if (session.summary) {
+        contextPrompt += this.formatSummaryForPrompt(session.summary);
+      } else {
+        contextPrompt += this.formatFallbackContextForPrompt(olderMessages);
+      }
     }
 
     return {
@@ -289,6 +292,38 @@ class ChatMemoryService {
 
     prompt += '\n---\n';
     return prompt;
+  }
+
+  /**
+   * Provide lightweight continuity before first summary is generated.
+   * Helps preserve facts (for example names) when the chat grows past
+   * the recent window.
+   */
+  private formatFallbackContextForPrompt(olderMessages: ChatMessage[]): string {
+    const fallbackWindow = 4;
+    const maxCharsPerMessage = 180;
+    const snippets = olderMessages.slice(-fallbackWindow);
+
+    let prompt = '\n## Earlier Conversation Notes (pre-summary):\n';
+    prompt += 'Keep continuity with these prior points:\n';
+
+    snippets.forEach((msg, index) => {
+      const role = msg.role === 'user' ? 'User' : 'Assistant';
+      const compactContent = this.compactMessageForPrompt(msg.content, maxCharsPerMessage);
+      prompt += `${index + 1}. ${role}: ${compactContent}\n`;
+    });
+
+    prompt += '\n---\n';
+    return prompt;
+  }
+
+  /**
+   * Keep fallback context small while preserving key user details.
+   */
+  private compactMessageForPrompt(content: string, maxChars: number): string {
+    const normalized = content.replace(/\s+/g, ' ').trim();
+    if (normalized.length <= maxChars) return normalized;
+    return `${normalized.slice(0, maxChars)}...`;
   }
 
   /**

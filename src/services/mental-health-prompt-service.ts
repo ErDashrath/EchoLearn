@@ -264,7 +264,9 @@ If the user expresses thoughts of self-harm or suicide:
     }
     
     if (strategies.length > 0) {
-      return `\n\n### Recommended Coping Strategies to Suggest:
+      return `\n\n### Coping Strategies (Use Only When Relevant):
+Only use these if the user explicitly discusses emotional distress, asks for coping help,
+or asks a mental-health-related question. Do NOT force these into normal conversation.
 ${strategies.map(s => `- ${s}`).join('\n')}`;
     }
     
@@ -292,7 +294,10 @@ ${strategies.map(s => `- ${s}`).join('\n')}`;
 - Keep responses shorter for spoken delivery
 - Use a warm, conversational tone
 - Include pauses for reflection
-- Speak directly and compassionately`
+- Speak directly and compassionately
+- Normal conversation first: answer the user's direct request naturally
+- If user asks for story/joke/facts/general chat, respond normally and do not force therapy framing
+- Only introduce breathing exercises, grounding, coping steps, or assessment talk when user signals distress or asks for emotional support`
     };
     
     return guidelines[sessionType] || guidelines.chat;

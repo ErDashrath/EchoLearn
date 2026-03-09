@@ -2,7 +2,7 @@
  * F012-F016: Voice Therapy Hook
  * 
  * React hook for voice interactions in therapy sessions.
- * Provides easy-to-use interface for Whisper STT and Piper TTS.
+ * Provides easy-to-use interface for browser STT and Web Speech API TTS.
  * 
  * @module hooks/use-voice
  */
@@ -12,9 +12,8 @@ import {
   voiceService, 
   VoiceServiceState, 
   PiperVoice, 
-  TTSOptions,
-  PIPER_VOICES 
-} from '@/services/voice-service';
+  TTSOptions
+} from '@/services/voice-service-web';
 
 export interface UseVoiceOptions {
   autoInitialize?: boolean;
@@ -48,7 +47,7 @@ export interface UseVoiceReturn {
   // Configuration
   setVoice: (voice: PiperVoice) => void;
   currentVoice: PiperVoice;
-  availableVoices: PiperVoice[];
+  availableVoices: { id: PiperVoice; name: string; description: string }[];
   
   // Visualization
   getFrequencyData: () => Uint8Array | null;
@@ -76,13 +75,13 @@ export function useVoice(options: UseVoiceOptions = {}): UseVoiceReturn {
 
   // Auto-initialize if requested
   useEffect(() => {
-    if (autoInitialize && !state.sttLoaded && !initializingRef.current) {
+    if (autoInitialize && !state.ttsLoaded && !initializingRef.current) {
       initializingRef.current = true;
-      voiceService.initialize().finally(() => {
+      voiceService.initializeTTS().finally(() => {
         initializingRef.current = false;
       });
     }
-  }, [autoInitialize, state.sttLoaded]);
+  }, [autoInitialize, state.ttsLoaded]);
 
   // Set initial voice
   useEffect(() => {
@@ -101,15 +100,15 @@ export function useVoice(options: UseVoiceOptions = {}): UseVoiceReturn {
 
   // Actions
   const initialize = useCallback(async (): Promise<boolean> => {
-    return voiceService.initialize();
+    return voiceService.initializeTTS();
   }, []);
 
   const startListening = useCallback(async (): Promise<boolean> => {
-    return voiceService.startListening();
+    return Promise.resolve(voiceService.startListening());
   }, []);
 
   const stopListening = useCallback(async (): Promise<string> => {
-    const transcript = await voiceService.stopListening();
+    const transcript = voiceService.stopListening();
     lastTranscriptRef.current = '';
     return transcript;
   }, []);
@@ -146,19 +145,19 @@ export function useVoice(options: UseVoiceOptions = {}): UseVoiceReturn {
   }, []);
 
   // Compute derived state
-  const isLoading = state.status === 'loading-stt' || state.status === 'loading-tts';
-  const isReady = state.sttLoaded && state.ttsLoaded;
+  const isLoading = state.status === 'loading';
+  const isReady = state.ttsLoaded;
 
   return {
     // State
     isListening: state.isListening,
     isSpeaking: state.isSpeaking,
-    isTranscribing: state.isTranscribing,
+    isTranscribing: false,
     isLoading,
     isReady,
-    sttLoaded: state.sttLoaded,
+    sttLoaded: state.sttSupported,
     ttsLoaded: state.ttsLoaded,
-    loadProgress: state.loadProgress,
+    loadProgress: state.ttsLoadProgress,
     error: state.error,
     transcript: state.currentTranscript,
     status: state.status,
@@ -173,7 +172,7 @@ export function useVoice(options: UseVoiceOptions = {}): UseVoiceReturn {
     // Configuration
     setVoice,
     currentVoice: voiceService.getConfig().voice,
-    availableVoices: PIPER_VOICES,
+    availableVoices: voiceService.getAvailableVoices(),
     
     // Visualization
     getFrequencyData,
