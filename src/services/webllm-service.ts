@@ -29,6 +29,10 @@ export interface WebLLMGenerationConfig {
   topP: number;
 }
 
+// Event types that can be subscribed to
+export type WebLLMEvent = 'modelChange' | 'cacheChange';
+type WebLLMEventListener = (data?: any) => void;
+
 class WebLLMService {
   private engine: any = null;
   private webllm: any = null;
@@ -40,6 +44,7 @@ class WebLLMService {
   private progressCallback: ((progress: WebLLMProgress) => void) | null = null;
   private stopCallback: (() => void) | null = null;
   private isGenerating = false;
+  private eventListeners: Map<WebLLMEvent, Set<WebLLMEventListener>> = new Map();
 
   private models: WebLLMModel[] = [
     {
@@ -98,6 +103,22 @@ class WebLLMService {
     
     // Restore active model from localStorage
     this.restoreActiveModel();
+  }
+
+  // ===========================================================================
+  // EVENT SYSTEM — subscribe to model & cache changes instead of polling
+  // ===========================================================================
+
+  on(event: WebLLMEvent, listener: WebLLMEventListener): () => void {
+    if (!this.eventListeners.has(event)) {
+      this.eventListeners.set(event, new Set());
+    }
+    this.eventListeners.get(event)!.add(listener);
+    return () => this.eventListeners.get(event)?.delete(listener);
+  }
+
+  private emit(event: WebLLMEvent, data?: any): void {
+    this.eventListeners.get(event)?.forEach(listener => listener(data));
   }
 
   private restoreActiveModel() {
@@ -232,6 +253,7 @@ class WebLLMService {
     
     // Don't unload the engine, just mark as inactive
     // This keeps the model in memory but marks it as not actively selected
+    this.emit('modelChange', { modelId: null, loaded: false });
     console.log('Model deactivated successfully');
   }
 
@@ -263,8 +285,8 @@ class WebLLMService {
     if (this.webllm) return;
     
     try {
-      // @ts-ignore - Dynamic import from CDN
-      const module = await import('https://esm.run/@mlc-ai/web-llm');
+      // Use locally bundled @mlc-ai/web-llm (works offline after first install)
+      const module = await import('@mlc-ai/web-llm');
       this.webllm = module;
     } catch (error) {
       throw new Error(`Failed to load WebLLM: ${error}`);
@@ -278,6 +300,7 @@ class WebLLMService {
       cachedModels.push(modelId);
       localStorage.setItem('webllm-cached-models', JSON.stringify(cachedModels));
       console.log('Model marked as cached. Updated list:', cachedModels);
+      this.emit('cacheChange', cachedModels);
     }
   }
 
@@ -446,12 +469,16 @@ class WebLLMService {
 
       this.currentModel = modelId;
       this.activeModel = modelId; // Set as active model
+      localStorage.setItem('webllm-active-model', modelId);
       this.markModelAsCached(modelId);
       
       this.progressCallback?.({
         progress: 1,
         text: `${model.name} loaded successfully`
       });
+
+      // Notify subscribers that model state changed
+      this.emit('modelChange', { modelId, loaded: true });
 
       toast({
         title: "Model Loaded",

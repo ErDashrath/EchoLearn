@@ -107,6 +107,7 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
   // ===========================================================================
 
   useEffect(() => {
+    // Initial check
     const updateSelectedModel = async () => {
       try {
         const cachedModels = await webllmService.getCachedModelsAsync();
@@ -122,8 +123,20 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
     };
 
     updateSelectedModel();
-    const interval = setInterval(updateSelectedModel, 5000);
-    return () => clearInterval(interval);
+
+    // Subscribe to model/cache changes — no more polling
+    const unsubModel = webllmService.on('modelChange', (data) => {
+      if (data?.modelId) {
+        setSelectedModel(data.modelId);
+      }
+    });
+    const unsubCache = webllmService.on('cacheChange', (cachedModels) => {
+      if (Array.isArray(cachedModels) && cachedModels.length > 0 && !selectedModel) {
+        setSelectedModel(cachedModels[0]);
+      }
+    });
+
+    return () => { unsubModel(); unsubCache(); };
   }, [selectedModel]);
 
   // ===========================================================================

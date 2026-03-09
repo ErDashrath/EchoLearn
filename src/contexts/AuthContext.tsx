@@ -80,8 +80,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const currentUser = authService.getCurrentUser();
       setUser(currentUser);
       
-      // Check DASS-21 completion if user exists
+      // Restore encryption keys from sessionStorage if user session exists
       if (currentUser) {
+        await storageService.restoreEncryptionKeys();
+        
+        // Check DASS-21 completion
         await checkDASS21Completion(currentUser.username);
       }
       

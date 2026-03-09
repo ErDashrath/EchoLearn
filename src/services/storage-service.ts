@@ -126,6 +126,15 @@ class StorageStore {
       this.encryptionKey = await CryptoUtils.deriveKey(password, salt);
     }
   }
+
+  /**
+   * Set encryption key directly from an imported CryptoKey
+   */
+  setEncryptionKeyDirect(key: CryptoKey): void {
+    if (this.useEncryption) {
+      this.encryptionKey = key;
+    }
+  }
   
   /**
    * Clear encryption key
@@ -269,7 +278,51 @@ class StorageService {
       this.analysis.setEncryptionKey(password, salt),
       this.assessments.setEncryptionKey(password, salt)
     ]);
+
+    // Persist the derived key in sessionStorage so page refreshes
+    // can restore encryption without re-entering the password.
+    // sessionStorage is tab-scoped and cleared on tab close — acceptable
+    // security trade-off for UX.
+    try {
+      const key = await CryptoUtils.deriveKey(password, salt);
+      const raw = await crypto.subtle.exportKey('raw', key);
+      const b64 = btoa(String.fromCharCode(...new Uint8Array(raw)));
+      sessionStorage.setItem('mindscribe_ek', b64);
+    } catch (err) {
+      console.warn('Could not persist encryption key for session restore:', err);
+    }
+
     console.log('✅ Storage encryption initialized');
+  }
+
+  /**
+   * Restore encryption keys from sessionStorage after a page refresh.
+   * Returns true if keys were restored successfully.
+   */
+  async restoreEncryptionKeys(): Promise<boolean> {
+    try {
+      const b64 = sessionStorage.getItem('mindscribe_ek');
+      if (!b64) return false;
+
+      const raw = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+      const key = await crypto.subtle.importKey(
+        'raw',
+        raw,
+        { name: 'AES-GCM', length: 256 },
+        true,
+        ['encrypt', 'decrypt']
+      );
+
+      this.journals.setEncryptionKeyDirect(key);
+      this.chats.setEncryptionKeyDirect(key);
+      this.analysis.setEncryptionKeyDirect(key);
+      this.assessments.setEncryptionKeyDirect(key);
+      console.log('✅ Storage encryption restored from session');
+      return true;
+    } catch (err) {
+      console.warn('Failed to restore encryption keys:', err);
+      return false;
+    }
   }
   
   /**
@@ -280,6 +333,7 @@ class StorageService {
     this.chats.clearEncryptionKey();
     this.analysis.clearEncryptionKey();
     this.assessments.clearEncryptionKey();
+    sessionStorage.removeItem('mindscribe_ek');
     console.log('✅ Storage encryption keys cleared');
   }
 }

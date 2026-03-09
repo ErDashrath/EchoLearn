@@ -217,13 +217,13 @@ const VoiceTherapyPage: React.FC = () => {
 
   // Check WebLLM state
   useEffect(() => {
-    const checkLLM = () => {
-      setLlmLoaded(webllmService.isModelLoaded());
-    };
-    checkLLM();
-    // Check periodically since webllmService doesn't have subscribe
-    const interval = setInterval(checkLLM, 1000);
-    return () => clearInterval(interval);
+    setLlmLoaded(webllmService.isModelLoaded());
+
+    // Subscribe to model changes instead of polling
+    const unsub = webllmService.on('modelChange', (data) => {
+      setLlmLoaded(!!data?.loaded);
+    });
+    return () => unsub();
   }, []);
 
   // Load DASS-21 results
