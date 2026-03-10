@@ -36,18 +36,14 @@ import {
   TrendingUp,
   TrendingDown,
   Minus,
-  Calendar,
   Brain,
   Heart,
   Zap,
   Target,
-  Award,
   Flame,
   BookOpen,
   Activity,
-  AlertTriangle,
   CheckCircle2,
-  Clock,
   Sparkles,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -154,18 +150,18 @@ const StatCard = memo(({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-5 hover:bg-white/10 transition-colors"
+      className="bg-overlay-bg backdrop-blur-sm border border-overlay-border rounded-2xl p-5 hover:bg-overlay-bg-hover transition-colors"
     >
       <div className="flex items-start justify-between">
         <div className={`p-2.5 rounded-xl bg-gradient-to-br ${colorClasses[color]} shadow-lg`}>
-          <Icon className="w-5 h-5 text-white" />
+          <Icon className="w-5 h-5 text-dark-text" />
         </div>
         {trend && (
           <div className={cn(
             'flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full',
             trend === 'up' && 'bg-emerald-500/20 text-emerald-400',
             trend === 'down' && 'bg-red-500/20 text-red-400',
-            trend === 'neutral' && 'bg-gray-500/20 text-gray-400'
+            trend === 'neutral' && 'bg-dark-border/20 text-dark-text-secondary'
           )}>
             {trend === 'up' && <TrendingUp className="w-3 h-3" />}
             {trend === 'down' && <TrendingDown className="w-3 h-3" />}
@@ -174,10 +170,10 @@ const StatCard = memo(({
         )}
       </div>
       <div className="mt-4">
-        <p className="text-3xl font-bold text-white">{value}</p>
-        <p className="text-sm text-gray-400 mt-1">{label}</p>
+        <p className="text-3xl font-bold text-dark-text">{value}</p>
+        <p className="text-sm text-dark-text-secondary mt-1">{label}</p>
         {subValue && (
-          <p className="text-xs text-gray-500 mt-1">{subValue}</p>
+          <p className="text-xs text-dark-text-secondary mt-1">{subValue}</p>
         )}
       </div>
     </motion.div>
@@ -201,15 +197,15 @@ const ChartCard = memo(({
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
     className={cn(
-      'bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-6',
+      'bg-overlay-bg backdrop-blur-sm border border-overlay-border rounded-2xl p-6',
       className
     )}
   >
     <div className="flex items-center gap-3 mb-6">
       <div className="p-2 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600">
-        <Icon className="w-4 h-4 text-white" />
+        <Icon className="w-4 h-4 text-dark-text" />
       </div>
-      <h3 className="text-lg font-semibold text-white">{title}</h3>
+      <h3 className="text-lg font-semibold text-dark-text">{title}</h3>
     </div>
     {children}
   </motion.div>
@@ -258,11 +254,11 @@ const DASS21Card = memo(({
   };
 
   return (
-    <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-4">
+    <div className="bg-overlay-bg backdrop-blur-sm border border-overlay-border rounded-xl p-4">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Icon className={cn('w-5 h-5', textColorMap[color])} />
-          <span className="font-medium text-white">{title}</span>
+          <span className="font-medium text-dark-text">{title}</span>
         </div>
         <span className={cn(
           'px-2.5 py-1 rounded-full text-xs font-medium',
@@ -272,14 +268,14 @@ const DASS21Card = memo(({
           {level}
         </span>
       </div>
-      <div className="text-3xl font-bold text-white mb-2">{score}</div>
-      <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+      <div className="text-3xl font-bold text-dark-text mb-2">{score}</div>
+      <div className="h-2 bg-overlay-border rounded-full overflow-hidden">
         <div 
           className={cn('h-full rounded-full transition-all duration-500', colorMap[color])}
           style={{ width: `${percentage}%` }}
         />
       </div>
-      <p className="text-xs text-gray-500 mt-2">Score range: 0-{maxScore}</p>
+      <p className="text-xs text-dark-text-secondary mt-2">Score range: 0-{maxScore}</p>
     </div>
   );
 });
@@ -294,15 +290,15 @@ const InsightCard = memo(({ insights }: { insights: string[] }) => (
   >
     <div className="flex items-center gap-3 mb-4">
       <div className="p-2 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600">
-        <Sparkles className="w-4 h-4 text-white" />
+        <Sparkles className="w-4 h-4 text-dark-text" />
       </div>
-      <h3 className="text-lg font-semibold text-white">AI Insights</h3>
+      <h3 className="text-lg font-semibold text-dark-text">AI Insights</h3>
     </div>
     <div className="space-y-3">
       {insights.map((insight, index) => (
-        <div key={index} className="flex items-start gap-3 p-3 bg-white/5 rounded-lg">
+        <div key={index} className="flex items-start gap-3 p-3 bg-overlay-bg rounded-lg">
           <CheckCircle2 className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-gray-300">{insight}</p>
+          <p className="text-sm text-dark-text-secondary">{insight}</p>
         </div>
       ))}
     </div>
@@ -315,12 +311,12 @@ const LoadingSkeleton = memo(() => (
   <div className="space-y-6 animate-pulse">
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
       {[...Array(4)].map((_, i) => (
-        <div key={i} className="h-32 bg-white/5 rounded-2xl" />
+        <div key={i} className="h-32 bg-overlay-bg rounded-2xl" />
       ))}
     </div>
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div className="h-80 bg-white/5 rounded-2xl" />
-      <div className="h-80 bg-white/5 rounded-2xl" />
+      <div className="h-80 bg-overlay-bg rounded-2xl" />
+      <div className="h-80 bg-overlay-bg rounded-2xl" />
     </div>
   </div>
 ));
@@ -336,8 +332,8 @@ const EmptyState = memo(() => (
     <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center mb-6">
       <BarChart3 className="w-10 h-10 text-blue-400" />
     </div>
-    <h2 className="text-2xl font-bold text-white mb-2">No Data Yet</h2>
-    <p className="text-gray-400 max-w-md mb-6">
+    <h2 className="text-2xl font-bold text-dark-text mb-2">No Data Yet</h2>
+    <p className="text-dark-text-secondary max-w-md mb-6">
       Start journaling to see your mental health insights and trends. Your dashboard will come to life as you track your emotional journey.
     </p>
     <Button 
@@ -528,7 +524,7 @@ export default function DashboardPage() {
     };
 
     // Generate insights
-    const insights = generateInsights(entries, baseStats, positiveCount, negativeCount, stressCounts);
+    const insights = generateInsights(baseStats, positiveCount, negativeCount, stressCounts);
 
     return {
       ...baseStats,
@@ -543,7 +539,6 @@ export default function DashboardPage() {
 
   // Generate AI insights
   const generateInsights = (
-    entries: JournalEntry[],
     stats: JournalStats,
     positiveCount: number,
     negativeCount: number,
@@ -587,7 +582,7 @@ export default function DashboardPage() {
   // Render
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-900 p-6">
+      <div className="min-h-screen bg-dark-bg p-6">
         <div className="max-w-7xl mx-auto">
           <LoadingSkeleton />
         </div>
@@ -597,7 +592,7 @@ export default function DashboardPage() {
 
   if (!stats || stats.totalEntries === 0) {
     return (
-      <div className="min-h-screen bg-gray-900 p-6">
+      <div className="min-h-screen bg-dark-bg p-6">
         <div className="max-w-7xl mx-auto">
           <EmptyState />
         </div>
@@ -606,7 +601,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
+    <div className="min-h-screen bg-dark-bg text-dark-text p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -614,16 +609,16 @@ export default function DashboardPage() {
             <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
               Mental Health Dashboard
             </h1>
-            <p className="text-gray-400 mt-1">Track your emotional journey and wellness trends</p>
+            <p className="text-dark-text-secondary mt-1">Track your emotional journey and wellness trends</p>
           </div>
           
           <select
             value={timeRange}
             onChange={(e) => setTimeRange(Number(e.target.value))}
-            className="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-4 py-2 bg-overlay-bg border border-overlay-border rounded-lg text-dark-text focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             {TIME_RANGES.map(range => (
-              <option key={range.value} value={range.value} className="bg-gray-800">
+              <option key={range.value} value={range.value} className="bg-dark-bg-secondary">
                 {range.label}
               </option>
             ))}
@@ -631,7 +626,7 @@ export default function DashboardPage() {
         </div>
 
         {/* DASS-21 Results */}
-        {dass21Results && (
+        {dass21Results && dass21Results.severityLevels && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -644,7 +639,7 @@ export default function DashboardPage() {
                 </div>
                 <h3 className="text-lg font-semibold text-white">DASS-21 Baseline Assessment</h3>
               </div>
-              <span className="text-sm text-gray-400">
+              <span className="text-sm text-dark-text-secondary">
                 Completed: {new Date(dass21Results.completedAt).toLocaleDateString()}
               </span>
             </div>
@@ -654,29 +649,29 @@ export default function DashboardPage() {
                 title="Depression"
                 score={dass21Results.scores.depression}
                 maxScore={42}
-                level={dass21Results.severityLevels.depression.level}
-                color={dass21Results.severityLevels.depression.color}
+                level={dass21Results.severityLevels.depression?.level}
+                color={dass21Results.severityLevels.depression?.color}
                 icon={Heart}
               />
               <DASS21Card
                 title="Anxiety"
                 score={dass21Results.scores.anxiety}
                 maxScore={42}
-                level={dass21Results.severityLevels.anxiety.level}
-                color={dass21Results.severityLevels.anxiety.color}
+                level={dass21Results.severityLevels.anxiety?.level}
+                color={dass21Results.severityLevels.anxiety?.color}
                 icon={Zap}
               />
               <DASS21Card
                 title="Stress"
                 score={dass21Results.scores.stress}
                 maxScore={42}
-                level={dass21Results.severityLevels.stress.level}
-                color={dass21Results.severityLevels.stress.color}
+                level={dass21Results.severityLevels.stress?.level}
+                color={dass21Results.severityLevels.stress?.color}
                 icon={Activity}
               />
             </div>
             
-            <p className="text-sm text-gray-400 mt-4 p-3 bg-white/5 rounded-lg">
+            <p className="text-sm text-dark-text-secondary mt-4 p-3 bg-overlay-bg rounded-lg">
               <strong>Note:</strong> This baseline helps MindScribe provide personalized support. Your data is private and stored securely on your device.
             </p>
           </motion.div>
@@ -764,7 +759,7 @@ export default function DashboardPage() {
                   outerRadius={100}
                   paddingAngle={2}
                   dataKey="value"
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  label={({ name, percent = 0 }) => `${name} ${(percent * 100).toFixed(0)}%`}
                   labelLine={false}
                 >
                   {stats.emotionData.map((entry, index) => (
@@ -824,10 +819,10 @@ export default function DashboardPage() {
                     borderRadius: '8px',
                     color: '#fff',
                   }}
-                  formatter={(value: number, name: string, props: any) => [
-                    `${value} entries (${props.payload.percentage}%)`,
-                    name,
-                  ]}
+                  formatter={((value: number | undefined, name: string | undefined, props: any) => {
+                    const numValue = value ?? 0;
+                    return [`${numValue} entries (${props.payload.percentage}%)`, name ?? ''];
+                  }) as any}
                 />
                 <Bar dataKey="value" name="Entries" radius={[0, 4, 4, 0]}>
                   <Cell fill={MOOD_COLORS.positive} />

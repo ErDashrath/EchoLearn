@@ -196,28 +196,28 @@ const AnalysisCard = memo<AnalysisCardProps>(({ analysis }) => {
       variants={fadeInUp}
       initial="initial"
       animate="animate"
-      className="rounded-xl border border-gray-700/50 bg-gradient-to-br from-gray-900/50 to-gray-800/30 p-4 backdrop-blur-sm"
+      className="rounded-xl border border-dark-border/50 bg-gradient-to-br from-dark-bg/50 to-dark-bg-secondary/30 p-4 backdrop-blur-sm"
     >
       <div className="flex items-center gap-2 mb-4">
         <div className="rounded-lg p-2 bg-gradient-to-br from-blue-500 to-purple-600">
-          <Sparkles className="h-4 w-4 text-white" />
+          <Sparkles className="h-4 w-4 text-dark-text" />
         </div>
         <div>
-          <h4 className="text-sm font-semibold text-white">AI Analysis</h4>
-          <p className="text-xs text-gray-400">Powered by WebLLM</p>
+          <h4 className="text-sm font-semibold text-dark-text">AI Analysis</h4>
+          <p className="text-xs text-dark-text-secondary">Powered by WebLLM</p>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 mb-4">
         {/* Mood */}
-        <div className="rounded-lg bg-gray-800/50 p-3">
-          <span className="text-xs text-gray-400 block mb-1">Mood</span>
+        <div className="rounded-lg bg-dark-bg-secondary/50 p-3">
+          <span className="text-xs text-dark-text-secondary block mb-1">Mood</span>
           <MoodIndicator mood={analysis.mood} size="md" />
         </div>
 
         {/* Stress */}
-        <div className="rounded-lg bg-gray-800/50 p-3">
-          <span className="text-xs text-gray-400 block mb-1">Stress Level</span>
+        <div className="rounded-lg bg-dark-bg-secondary/50 p-3">
+          <span className="text-xs text-dark-text-secondary block mb-1">Stress Level</span>
           <div className={cn('flex items-center gap-1.5', stressConfig.color)}>
             <div className={cn('rounded-full p-1', stressConfig.bg)}>
               <Activity className="h-4 w-4" />
@@ -227,10 +227,10 @@ const AnalysisCard = memo<AnalysisCardProps>(({ analysis }) => {
         </div>
 
         {/* Sentiment */}
-        <div className="rounded-lg bg-gray-800/50 p-3 col-span-2">
-          <span className="text-xs text-gray-400 block mb-2">Sentiment Score</span>
+        <div className="rounded-lg bg-dark-bg-secondary/50 p-3 col-span-2">
+          <span className="text-xs text-dark-text-secondary block mb-2">Sentiment Score</span>
           <div className="flex items-center gap-2">
-            <div className="flex-1 h-2 rounded-full bg-gray-700 overflow-hidden">
+            <div className="flex-1 h-2 rounded-full bg-dark-border overflow-hidden">
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: `${((analysis.sentimentScore + 1) / 2) * 100}%` }}
@@ -238,7 +238,7 @@ const AnalysisCard = memo<AnalysisCardProps>(({ analysis }) => {
                 className={cn('h-full rounded-full bg-gradient-to-r', moodConfig.gradient)}
               />
             </div>
-            <span className="text-sm font-mono text-gray-300">
+            <span className="text-sm font-mono text-dark-text-secondary">
               {analysis.sentimentScore.toFixed(2)}
             </span>
           </div>
@@ -248,13 +248,13 @@ const AnalysisCard = memo<AnalysisCardProps>(({ analysis }) => {
       {/* Emotions */}
       {analysis.emotions.length > 0 && (
         <div className="mb-4">
-          <span className="text-xs text-gray-400 block mb-2">Detected Emotions</span>
+          <span className="text-xs text-dark-text-secondary block mb-2">Detected Emotions</span>
           <div className="flex flex-wrap gap-1.5">
             {analysis.emotions.map((emotion, i) => (
               <Badge
                 key={i}
                 variant="secondary"
-                className="text-xs bg-gray-700/50 text-gray-300 hover:bg-gray-700"
+                className="text-xs bg-dark-border/50 text-dark-text-secondary hover:bg-dark-border"
               >
                 {emotion}
               </Badge>
@@ -264,20 +264,20 @@ const AnalysisCard = memo<AnalysisCardProps>(({ analysis }) => {
       )}
 
       {/* Summary */}
-      <div className="rounded-lg bg-gray-800/30 p-3 border border-gray-700/50">
-        <p className="text-sm text-gray-300 leading-relaxed">{analysis.summary}</p>
+      <div className="rounded-lg bg-dark-bg-secondary/30 p-3 border border-dark-border/50">
+        <p className="text-sm text-dark-text-secondary leading-relaxed">{analysis.summary}</p>
       </div>
 
       {/* Suggestions */}
       {analysis.suggestions && analysis.suggestions.length > 0 && (
         <div className="mt-4">
-          <span className="text-xs text-gray-400 flex items-center gap-1 mb-2">
+          <span className="text-xs text-dark-text-secondary flex items-center gap-1 mb-2">
             <Target className="h-3 w-3" />
             Suggestions
           </span>
           <ul className="space-y-1">
             {analysis.suggestions.map((suggestion, i) => (
-              <li key={i} className="text-xs text-gray-400 flex items-start gap-2">
+              <li key={i} className="text-xs text-dark-text-secondary flex items-start gap-2">
                 <Zap className="h-3 w-3 mt-0.5 text-blue-400 shrink-0" />
                 {suggestion}
               </li>
@@ -374,15 +374,15 @@ const JournalEditor = memo<JournalEditorProps>(({
       initial="initial"
       animate="animate"
       exit="exit"
-      className="flex flex-col h-full bg-gray-900"
+      className="flex flex-col h-full bg-dark-bg"
     >
       {/* Header */}
-      <header className="flex items-center justify-between p-4 border-b border-gray-800">
+      <header className="flex items-center justify-between p-4 border-b border-dark-border">
         <Button
           variant="ghost"
           size="sm"
           onClick={onCancel}
-          className="text-gray-400 hover:text-white hover:bg-gray-800"
+          className="text-dark-text-secondary hover:text-dark-text hover:bg-dark-bg-secondary"
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back
@@ -390,7 +390,7 @@ const JournalEditor = memo<JournalEditorProps>(({
 
         <div className="flex items-center gap-2">
           {lastSaved && !entry && (
-            <span className="text-xs text-gray-500 hidden sm:block">
+            <span className="text-xs text-dark-text-secondary hidden sm:block">
               Draft saved {formatDistanceToNow(lastSaved, { addSuffix: true })}
             </span>
           )}
@@ -442,18 +442,18 @@ const JournalEditor = memo<JournalEditorProps>(({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Give your entry a title..."
-            className="text-xl font-semibold border-none bg-transparent focus-visible:ring-0 px-0 text-white placeholder:text-gray-600 mb-4"
+            className="text-xl font-semibold border-none bg-transparent focus-visible:ring-0 px-0 text-dark-text placeholder:text-dark-text-secondary mb-4"
           />
           
           <Textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
             placeholder="Write your thoughts here... Express yourself freely. This is your safe space for reflection and self-discovery."
-            className="flex-1 min-h-[300px] resize-none border-none bg-transparent focus-visible:ring-0 px-0 text-base leading-relaxed text-gray-300 placeholder:text-gray-600"
+            className="flex-1 min-h-[300px] resize-none border-none bg-transparent focus-visible:ring-0 px-0 text-base leading-relaxed text-dark-text-secondary placeholder:text-dark-text-secondary"
           />
 
           {/* Footer Stats */}
-          <div className="flex items-center justify-between pt-4 border-t border-gray-800 mt-4 text-sm text-gray-500">
+          <div className="flex items-center justify-between pt-4 border-t border-dark-border mt-4 text-sm text-dark-text-secondary">
             <div className="flex items-center gap-4">
               <span className="flex items-center gap-1">
                 <FileText className="h-3.5 w-3.5" />
@@ -475,7 +475,7 @@ const JournalEditor = memo<JournalEditorProps>(({
 
         {/* Analysis Sidebar (if available) */}
         {entry?.analysis && (
-          <div className="w-full lg:w-80 border-t lg:border-t-0 lg:border-l border-gray-800 p-4 overflow-auto bg-gray-900/50">
+          <div className="w-full lg:w-80 border-t lg:border-t-0 lg:border-l border-dark-border p-4 overflow-auto bg-dark-bg-secondary/50">
             <AnalysisCard analysis={entry.analysis} />
           </div>
         )}
@@ -512,8 +512,8 @@ const EntryCard = memo<EntryCardProps>(({
     >
       <Card
         className={cn(
-          'cursor-pointer transition-all duration-300 bg-gray-800/50 border-gray-700/50',
-          'hover:bg-gray-800/80 hover:border-gray-600/50 hover:shadow-lg',
+          'cursor-pointer transition-all duration-300 bg-dark-bg-secondary/50 border-dark-border/50',
+          'hover:bg-dark-bg-secondary/80 hover:border-dark-border/80 hover:shadow-lg',
         )}
         onClick={onClick}
       >
@@ -525,14 +525,14 @@ const EntryCard = memo<EntryCardProps>(({
                 'w-1 h-16 rounded-full shrink-0 transition-all',
                 moodConfig
                   ? `bg-gradient-to-b ${moodConfig.gradient}`
-                  : 'bg-gray-600'
+                  : 'bg-dark-border'
               )}
             />
 
             {/* Content */}
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-2 mb-1">
-                <h3 className="font-semibold text-white truncate">{entry.title}</h3>
+                <h3 className="font-semibold text-dark-text truncate">{entry.title}</h3>
                 
                 {/* Actions - Show on hover */}
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -541,7 +541,7 @@ const EntryCard = memo<EntryCardProps>(({
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-gray-400 hover:text-amber-400 hover:bg-amber-400/10"
+                        className="h-7 w-7 text-dark-text-secondary hover:text-amber-400 hover:bg-amber-400/10"
                         onClick={(e) => {
                           e.stopPropagation();
                           onToggleFavorite();
@@ -562,7 +562,7 @@ const EntryCard = memo<EntryCardProps>(({
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-gray-400 hover:text-rose-400 hover:bg-rose-400/10"
+                        className="h-7 w-7 text-dark-text-secondary hover:text-rose-400 hover:bg-rose-400/10"
                         onClick={(e) => {
                           e.stopPropagation();
                           onDelete();
@@ -576,12 +576,12 @@ const EntryCard = memo<EntryCardProps>(({
                 </div>
               </div>
 
-              <p className="text-sm text-gray-400 line-clamp-2 mb-3">
+              <p className="text-sm text-dark-text-secondary line-clamp-2 mb-3">
                 {entry.content.substring(0, 150)}...
               </p>
 
               {/* Meta Info */}
-              <div className="flex items-center gap-3 text-xs text-gray-500">
+              <div className="flex items-center gap-3 text-xs text-dark-text-secondary">
                 <span className="flex items-center gap-1">
                   <Calendar className="h-3 w-3" />
                   {formatEntryDate(entry.createdAt)}
@@ -620,10 +620,10 @@ const EmptyState = memo<{ onCreateNew: () => void; hasSearch: boolean }>(({ onCr
     <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-600/20 flex items-center justify-center">
       <PenLine className="h-10 w-10 text-blue-400" />
     </div>
-    <h3 className="text-xl font-semibold text-white mb-2">
+    <h3 className="text-xl font-semibold text-dark-text mb-2">
       {hasSearch ? 'No entries found' : 'Start Your Journal'}
     </h3>
-    <p className="text-gray-400 max-w-md mx-auto mb-6">
+    <p className="text-dark-text-secondary max-w-md mx-auto mb-6">
       {hasSearch
         ? 'Try a different search term or clear your search'
         : 'Writing helps you understand your thoughts and emotions. Begin your mental wellness journey today.'}
@@ -648,17 +648,17 @@ EmptyState.displayName = 'EmptyState';
 const LoadingSkeleton = memo(() => (
   <div className="space-y-3">
     {[1, 2, 3].map((i) => (
-      <Card key={i} className="bg-gray-800/50 border-gray-700/50">
+      <Card key={i} className="bg-dark-bg-secondary/50 border-dark-border/50">
         <CardContent className="p-4">
           <div className="flex gap-3">
-            <Skeleton className="w-1 h-16 rounded-full bg-gray-700" />
+            <Skeleton className="w-1 h-16 rounded-full bg-dark-border" />
             <div className="flex-1 space-y-2">
-              <Skeleton className="h-5 w-1/3 bg-gray-700" />
-              <Skeleton className="h-4 w-full bg-gray-700" />
-              <Skeleton className="h-4 w-2/3 bg-gray-700" />
+              <Skeleton className="h-5 w-1/3 bg-dark-border" />
+              <Skeleton className="h-4 w-full bg-dark-border" />
+              <Skeleton className="h-4 w-2/3 bg-dark-border" />
               <div className="flex gap-4 pt-2">
-                <Skeleton className="h-3 w-20 bg-gray-700" />
-                <Skeleton className="h-3 w-16 bg-gray-700" />
+                <Skeleton className="h-3 w-20 bg-dark-border" />
+                <Skeleton className="h-3 w-16 bg-dark-border" />
               </div>
             </div>
           </div>
@@ -787,18 +787,18 @@ const JournalPage: React.FC = () => {
   }
 
   return (
-    <div className="h-full flex flex-col bg-gray-900">
+    <div className="h-full flex flex-col bg-dark-bg">
       {/* Header */}
-      <header className="p-6 border-b border-gray-800">
+      <header className="p-6 border-b border-dark-border">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-dark-text flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-                <BookOpen className="h-5 w-5 text-white" />
+                <BookOpen className="h-5 w-5 text-dark-text" />
               </div>
               Journal
             </h1>
-            <p className="text-gray-400 text-sm mt-1">
+            <p className="text-dark-text-secondary text-sm mt-1">
               Your private space for reflection and self-discovery
             </p>
           </div>
@@ -814,34 +814,34 @@ const JournalPage: React.FC = () => {
 
         {/* Stats Bar */}
         <div className="flex items-center gap-6 mb-4 text-sm">
-          <div className="flex items-center gap-2 text-gray-400">
+          <div className="flex items-center gap-2 text-dark-text-secondary">
             <FileText className="h-4 w-4" />
-            <span><strong className="text-white">{stats.total}</strong> entries</span>
+            <span><strong className="text-dark-text">{stats.total}</strong> entries</span>
           </div>
-          <div className="flex items-center gap-2 text-gray-400">
+          <div className="flex items-center gap-2 text-dark-text-secondary">
             <Star className="h-4 w-4 text-amber-400" />
-            <span><strong className="text-white">{stats.favorites}</strong> favorites</span>
+            <span><strong className="text-dark-text">{stats.favorites}</strong> favorites</span>
           </div>
-          <div className="flex items-center gap-2 text-gray-400">
+          <div className="flex items-center gap-2 text-dark-text-secondary">
             <Brain className="h-4 w-4 text-blue-400" />
-            <span><strong className="text-white">{stats.analyzed}</strong> analyzed</span>
+            <span><strong className="text-dark-text">{stats.analyzed}</strong> analyzed</span>
           </div>
         </div>
 
         {/* Search */}
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-dark-text-secondary" />
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search your entries..."
-            className="pl-10 bg-gray-800/50 border-gray-700 text-white placeholder:text-gray-500 focus:border-blue-500"
+            className="pl-10 bg-dark-bg-secondary/50 border-dark-border text-dark-text placeholder:text-dark-text-secondary focus:border-blue-500"
           />
           {searchQuery && (
             <Button
               variant="ghost"
               size="icon"
-              className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6 text-gray-500 hover:text-white"
+              className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6 text-dark-text-secondary hover:text-dark-text"
               onClick={() => setSearchQuery('')}
             >
               <X className="h-3.5 w-3.5" />
@@ -883,15 +883,15 @@ const JournalPage: React.FC = () => {
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!deleteEntryId} onOpenChange={() => setDeleteEntryId(null)}>
-        <AlertDialogContent className="bg-gray-800 border-gray-700">
+        <AlertDialogContent className="bg-dark-bg-secondary border-dark-border">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-white">Delete Entry?</AlertDialogTitle>
-            <AlertDialogDescription className="text-gray-400">
+            <AlertDialogTitle className="text-dark-text">Delete Entry?</AlertDialogTitle>
+            <AlertDialogDescription className="text-dark-text-secondary">
               This action cannot be undone. Your journal entry will be permanently deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="bg-gray-700 border-gray-600 text-white hover:bg-gray-600">
+            <AlertDialogCancel className="bg-dark-border border-dark-border text-dark-text hover:bg-dark-border/80">
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction

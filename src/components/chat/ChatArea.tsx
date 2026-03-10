@@ -22,7 +22,7 @@ const WelcomeMessage = () => (
     className="flex items-start space-x-4"
   >
     <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-blue-500 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg">
-      <Bot className="h-5 w-5 text-white" />
+      <Bot className="h-5 w-5 text-dark-text" />
     </div>
     <div className="flex-1">
       <div className="ai-bubble rounded-3xl rounded-tl-lg px-6 py-4 shadow-lg hover-lift">
@@ -85,7 +85,7 @@ export function ChatArea({
               exit={{ opacity: 0 }}
               className="flex justify-center py-4"
             >
-              <div className="text-gray-400 text-sm">AI is thinking...</div>
+              <div className="text-dark-text-secondary text-sm">AI is thinking...</div>
             </motion.div>
           )}
         </AnimatePresence>

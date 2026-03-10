@@ -106,19 +106,19 @@ const FormatCard = memo(({
       'w-full p-4 rounded-xl border-2 text-left transition-all',
       selected 
         ? 'border-blue-500 bg-blue-500/10' 
-        : 'border-white/10 bg-white/5 hover:border-white/20'
+        : 'border-overlay-border bg-overlay-bg hover:border-overlay-bg-hover'
     )}
   >
     <div className="flex items-start gap-4">
       <div className={cn('p-3 rounded-lg bg-gradient-to-br', format.color)}>
-        <format.icon className="w-5 h-5 text-white" />
+        <format.icon className="w-5 h-5 text-dark-text" />
       </div>
       <div className="flex-1">
         <div className="flex items-center gap-2">
-          <h3 className="font-semibold text-white">{format.name}</h3>
+          <h3 className="font-semibold text-dark-text">{format.name}</h3>
           {selected && <CheckCircle2 className="w-4 h-4 text-blue-400" />}
         </div>
-        <p className="text-sm text-gray-400 mt-1">{format.description}</p>
+        <p className="text-sm text-dark-text-secondary mt-1">{format.description}</p>
       </div>
     </div>
   </motion.button>
@@ -143,22 +143,22 @@ const OptionToggle = memo(({
 }) => (
   <label className={cn(
     'flex items-start gap-4 p-4 rounded-xl border border-white/10 cursor-pointer transition-all',
-    checked && !disabled ? 'bg-white/5 border-blue-500/50' : 'bg-white/[0.02]',
+    checked && !disabled ? 'bg-overlay-bg border-blue-500/50' : 'bg-overlay-bg/50',
     disabled && 'opacity-50 cursor-not-allowed'
   )}>
-    <div className="p-2 rounded-lg bg-white/5">
-      <Icon className="w-4 h-4 text-gray-400" />
+    <div className="p-2 rounded-lg bg-overlay-bg">
+      <Icon className="w-4 h-4 text-dark-text-secondary" />
     </div>
     <div className="flex-1">
-      <div className="font-medium text-white">{label}</div>
-      <p className="text-sm text-gray-500 mt-0.5">{description}</p>
+      <div className="font-medium text-dark-text">{label}</div>
+      <p className="text-sm text-dark-text-secondary mt-0.5">{description}</p>
     </div>
     <input
       type="checkbox"
       checked={checked}
       onChange={(e) => onChange(e.target.checked)}
       disabled={disabled}
-      className="w-5 h-5 rounded border-gray-600 bg-white/10 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+      className="w-5 h-5 rounded border-dark-border bg-overlay-bg text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
     />
   </label>
 ));
@@ -170,25 +170,25 @@ const StatsPreview = memo(({ stats, entries }: { stats: JournalStats | null; ent
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-      <div className="bg-white/5 rounded-xl p-4 text-center">
+      <div className="bg-overlay-bg rounded-xl p-4 text-center">
         <BookOpen className="w-5 h-5 text-blue-400 mx-auto mb-2" />
-        <div className="text-2xl font-bold text-white">{entries.length}</div>
-        <div className="text-xs text-gray-500">Entries to Export</div>
+        <div className="text-2xl font-bold text-dark-text">{entries.length}</div>
+        <div className="text-xs text-dark-text-secondary">Entries to Export</div>
       </div>
-      <div className="bg-white/5 rounded-xl p-4 text-center">
+      <div className="bg-overlay-bg rounded-xl p-4 text-center">
         <FileText className="w-5 h-5 text-purple-400 mx-auto mb-2" />
-        <div className="text-2xl font-bold text-white">{stats.totalWords.toLocaleString()}</div>
-        <div className="text-xs text-gray-500">Words Written</div>
+        <div className="text-2xl font-bold text-dark-text">{stats.totalWords.toLocaleString()}</div>
+        <div className="text-xs text-dark-text-secondary">Words Written</div>
       </div>
-      <div className="bg-white/5 rounded-xl p-4 text-center">
-        <Activity className="w-5 h-5 text-green-400 mx-auto mb-2" />
-        <div className="text-2xl font-bold text-white">{((stats.averageMoodScore + 1) * 5).toFixed(1)}</div>
-        <div className="text-xs text-gray-500">Avg Mood Score</div>
+      <div className="bg-overlay-bg rounded-xl p-4 text-center">
+        <Activity className="w-5 h-5 text-pink-400 mx-auto mb-2" />
+        <div className="text-2xl font-bold text-dark-text">{((stats.averageMoodScore + 1) * 5).toFixed(1)}</div>
+        <div className="text-xs text-dark-text-secondary">Avg Mood</div>
       </div>
-      <div className="bg-white/5 rounded-xl p-4 text-center">
+      <div className="bg-overlay-bg rounded-xl p-4 text-center">
         <BarChart3 className="w-5 h-5 text-orange-400 mx-auto mb-2" />
-        <div className="text-2xl font-bold text-white">{Object.keys(stats.emotionFrequency).length}</div>
-        <div className="text-xs text-gray-500">Unique Emotions</div>
+        <div className="text-2xl font-bold text-dark-text">{Object.keys(stats.emotionFrequency).length}</div>
+        <div className="text-xs text-dark-text-secondary">Unique Emotions</div>
       </div>
     </div>
   );
@@ -197,11 +197,11 @@ const StatsPreview = memo(({ stats, entries }: { stats: JournalStats | null; ent
 StatsPreview.displayName = 'StatsPreview';
 
 const PrivacyNotice = memo(() => (
-  <div className="flex items-start gap-3 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl">
-    <Shield className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
+  <div className="flex items-start gap-3 p-4 bg-yellow-50 dark:bg-yellow-500/10 border border-yellow-300 dark:border-yellow-500/20 rounded-xl">
+    <Shield className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
     <div>
-      <h4 className="font-medium text-yellow-300">Privacy Notice</h4>
-      <p className="text-sm text-yellow-200/70 mt-1">
+      <h4 className="font-medium text-yellow-800 dark:text-yellow-300">Privacy Notice</h4>
+      <p className="text-sm text-yellow-700 dark:text-yellow-200/70 mt-1">
         Your exported data contains sensitive mental health information. Store it securely and 
         be cautious when sharing. All data is processed locally on your device.
       </p>
@@ -214,7 +214,7 @@ PrivacyNotice.displayName = 'PrivacyNotice';
 const LoadingState = memo(() => (
   <div className="flex flex-col items-center justify-center py-12">
     <Loader2 className="w-8 h-8 text-blue-400 animate-spin mb-4" />
-    <p className="text-gray-400">Loading your data...</p>
+    <p className="text-dark-text-secondary">Loading your data...</p>
   </div>
 ));
 
@@ -229,8 +229,8 @@ const EmptyState = memo(() => (
     <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center mb-4">
       <FileText className="w-8 h-8 text-blue-400" />
     </div>
-    <h2 className="text-xl font-bold text-white mb-2">No Data to Export</h2>
-    <p className="text-gray-400 max-w-md">
+    <h2 className="text-xl font-bold text-dark-text mb-2">No Data to Export</h2>
+    <p className="text-dark-text-secondary max-w-md">
       Start journaling to generate reports. Your entries and analysis will appear here once you begin tracking your mental health journey.
     </p>
   </motion.div>
@@ -352,14 +352,14 @@ export default function ReportsPage() {
 
   // Render
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
+    <div className="min-h-screen bg-dark-bg text-dark-text p-6">
       <div className="max-w-4xl mx-auto space-y-8">
         {/* Header */}
         <div>
           <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
             Reports & Export
           </h1>
-          <p className="text-gray-400 mt-2">
+          <p className="text-dark-text-secondary mt-2">
             Generate comprehensive reports or export your data for backup and analysis
           </p>
         </div>
@@ -382,7 +382,7 @@ export default function ReportsPage() {
               animate={{ opacity: 1, y: 0 }}
               className="space-y-4"
             >
-              <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+              <h2 className="text-lg font-semibold text-dark-text flex items-center gap-2">
                 <Download className="w-5 h-5 text-blue-400" />
                 Choose Export Format
               </h2>
@@ -405,7 +405,7 @@ export default function ReportsPage() {
               transition={{ delay: 0.1 }}
               className="space-y-4"
             >
-              <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+              <h2 className="text-lg font-semibold text-dark-text flex items-center gap-2">
                 <Calendar className="w-5 h-5 text-purple-400" />
                 Date Range
               </h2>
@@ -418,7 +418,7 @@ export default function ReportsPage() {
                       'px-4 py-2 rounded-lg text-sm font-medium transition-all',
                       dateRange === range.value
                         ? 'bg-blue-500 text-white'
-                        : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                        : 'bg-overlay-bg text-dark-text-secondary hover:bg-overlay-bg-hover'
                     )}
                   >
                     {range.label}
@@ -435,7 +435,7 @@ export default function ReportsPage() {
                 transition={{ delay: 0.2 }}
                 className="space-y-4"
               >
-                <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                <h2 className="text-lg font-semibold text-dark-text flex items-center gap-2">
                   <Info className="w-5 h-5 text-green-400" />
                   Report Options
                 </h2>
@@ -508,7 +508,7 @@ export default function ReportsPage() {
                 )}
               </Button>
               
-              <p className="text-sm text-gray-500 mt-3">
+              <p className="text-sm text-dark-text-secondary mt-3">
                 {selectedFormat === 'pdf' && 'PDF report includes visual summaries and is best for sharing with healthcare providers.'}
                 {selectedFormat === 'json' && 'JSON export contains complete data structure and is best for backup or data migration.'}
                 {selectedFormat === 'csv' && 'CSV export can be opened in Excel or Google Sheets for custom analysis.'}
