@@ -1,16 +1,13 @@
 /**
- * F012-F016: Voice Therapy Service
- * 
- * Using Web Speech API with optimized voice selection for soothing experience.
- * Modern browsers (Chrome, Edge) have high-quality neural voices built-in.
- * 
- * Features:
- * - Instant loading (no WASM download)
- * - High-quality voices on modern browsers
- * - Soft, calm voice selection algorithm
- * - Works offline after initial load
- * 
- * @module services/voice-service
+ * F012-F016: Voice Therapy Service (Web Speech API)
+ *
+ * TTS:
+ * - Native browser SpeechSynthesis (Web Speech API)
+ *
+ * STT:
+ * - Browser SpeechRecognition / webkitSpeechRecognition
+ *
+ * @module services/voice-service-web
  */
 
 // =============================================================================
@@ -36,7 +33,7 @@ export interface TTSOptions {
   onError?: (error: Error) => void;
 }
 
-export type VoiceServiceStatus = 
+export type VoiceServiceStatus =
   | 'idle'
   | 'loading'
   | 'ready'
@@ -62,19 +59,24 @@ interface VoiceOption {
   voice: SpeechSynthesisVoice | null;
 }
 
+const INTERRUPTED_ERROR = 'Speech interrupted';
+
 // =============================================================================
 // VOICE SERVICE CLASS
 // =============================================================================
 
 class VoiceService {
   private recognition: any = null;
-  private audioContext: AudioContext | null = null;
-  private analyser: AnalyserNode | null = null;
   private selectedVoice: SpeechSynthesisVoice | null = null;
-  private availableVoicesList: VoiceOption[] = [];
-  private oscillator: OscillatorNode | null = null;
-  private gainNode: GainNode | null = null;
-  
+  private availableVoicesList: VoiceOption[] = [
+    {
+      id: 'default',
+      name: 'Auto (Best)',
+      description: 'Auto-select best available native voice',
+      voice: null,
+    },
+  ];
+
   private state: VoiceServiceState = {
     status: 'idle',
     isListening: false,
@@ -88,25 +90,27 @@ class VoiceService {
 
   private config: VoiceConfig = {
     voice: 'default',
-    speed: 0.9,        // Slightly slower for calm feel
-    pitch: 0.95,       // Slightly lower pitch for soothing
-    volume: 0.85,
+    speed: 0.95,
+    pitch: 0.9,
+    volume: 0.9,
   };
 
   private listeners: Set<(state: VoiceServiceState) => void> = new Set();
+  private speakGeneration = 0;
+  private preloadPromise: Promise<boolean> | null = null;
+  private nativeVoicesLoaded = false;
+
+  constructor() {
+    this.checkSTTSupport();
+  }
 
   // ===========================================================================
   // INITIALIZATION
   // ===========================================================================
 
-  constructor() {
-    this.checkSTTSupport();
-    this.initializeTTS();
-  }
-
   private checkSTTSupport(): void {
-    const SpeechRecognition = 
-      (window as any).SpeechRecognition || 
+    const SpeechRecognition =
+      (window as any).SpeechRecognition ||
       (window as any).webkitSpeechRecognition;
 
     this.state.sttSupported = !!SpeechRecognition;
@@ -130,14 +134,16 @@ class VoiceService {
     };
 
     this.recognition.onend = () => {
-      this.updateState({ isListening: false, status: this.state.ttsLoaded ? 'ready' : 'idle' });
+      this.updateState({
+        isListening: false,
+        status: this.state.ttsLoaded ? 'ready' : 'idle',
+      });
     };
 
     this.recognition.onerror = (event: any) => {
-      console.error('Speech recognition error:', event.error);
       if (event.error !== 'no-speech' && event.error !== 'aborted') {
-        this.updateState({ 
-          isListening: false, 
+        this.updateState({
+          isListening: false,
           status: 'error',
           error: `Mic error: ${event.error}`,
         });
@@ -158,34 +164,22 @@ class VoiceService {
       }
 
       this.updateState({
-        currentTranscript: finalTranscript || interimTranscript,
+        currentTranscript: (finalTranscript || interimTranscript).trim(),
       });
     };
   }
 
-  /**
-   * Initialize Web Speech API TTS with best available voice
-   */
   async initializeTTS(): Promise<boolean> {
     if (this.state.ttsLoaded) return true;
 
     try {
-      this.updateState({ status: 'loading', ttsLoadProgress: 30 });
-
-      if (!('speechSynthesis' in window)) {
-        throw new Error('Speech synthesis not supported');
-      }
-
-      // Wait for voices to load
-      await this.loadVoices();
-      
-      this.updateState({ ttsLoaded: true, status: 'ready', ttsLoadProgress: 100 });
-      console.log('✅ TTS initialized with voice:', this.selectedVoice?.name || 'default');
+      this.updateState({ status: 'loading', ttsLoadProgress: 20, error: null });
+      await this.loadNativeVoices();
+      this.updateState({ status: 'ready', ttsLoaded: true, ttsLoadProgress: 100 });
       return true;
     } catch (error) {
-      console.error('Failed to initialize TTS:', error);
-      this.updateState({ 
-        status: 'error', 
+      this.updateState({
+        status: 'error',
         ttsLoaded: false,
         error: 'Voice loading failed.',
       });
@@ -193,105 +187,81 @@ class VoiceService {
     }
   }
 
-  private async loadVoices(): Promise<void> {
-    return new Promise((resolve) => {
-      const attemptLoad = () => {
-        const voices = speechSynthesis.getVoices();
-        
-        if (voices.length > 0) {
-          this.processVoices(voices);
-          this.updateState({ ttsLoadProgress: 70 });
-          resolve();
-        } else {
-          // Wait for voices to load
-          speechSynthesis.onvoiceschanged = () => {
-            const loadedVoices = speechSynthesis.getVoices();
-            this.processVoices(loadedVoices);
-            this.updateState({ ttsLoadProgress: 70 });
-            resolve();
-          };
-          
-          // Fallback timeout
-          setTimeout(() => {
-            const fallbackVoices = speechSynthesis.getVoices();
-            if (fallbackVoices.length > 0) {
-              this.processVoices(fallbackVoices);
-            }
-            resolve();
-          }, 1000);
-        }
-      };
+  async preloadForSession(): Promise<boolean> {
+    if (this.preloadPromise) {
+      return this.preloadPromise;
+    }
 
-      attemptLoad();
-    });
+    this.preloadPromise = this.initializeTTS();
+    try {
+      return await this.preloadPromise;
+    } finally {
+      this.preloadPromise = null;
+    }
   }
 
-  private processVoices(voices: SpeechSynthesisVoice[]): void {
-    // Priority list of soft, high-quality voices (neural/premium voices)
-    const preferredVoices = [
-      // Microsoft Edge neural voices (best quality)
-      'Microsoft Aria Online',
-      'Microsoft Jenny',
-      'Microsoft Aria',
-      'Microsoft Zira',
-      'Microsoft AvaMultilingual Online',
-      // Google voices
-      'Google UK English Female',
-      'Google US English',
-      // Apple voices
-      'Samantha',
-      'Karen',
-      'Moira',
-      'Fiona',
-      // Generic female voices (usually softer)
-      'female',
-      'woman',
-    ];
+  private async loadNativeVoices(): Promise<void> {
+    if (this.nativeVoicesLoaded) return;
+    if (!('speechSynthesis' in window)) {
+      throw new Error('Speech synthesis not supported');
+    }
 
-    // Find the best voice
-    let bestVoice: SpeechSynthesisVoice | null = null;
-    
-    for (const preferred of preferredVoices) {
-      const found = voices.find(v => 
-        v.name.toLowerCase().includes(preferred.toLowerCase()) &&
-        v.lang.startsWith('en')
-      );
-      if (found) {
-        bestVoice = found;
-        break;
+    await new Promise<void>((resolve) => {
+      const voices = speechSynthesis.getVoices();
+      if (voices.length > 0) {
+        this.processNativeVoices(voices);
+        this.updateState({ ttsLoadProgress: 80 });
+        resolve();
+        return;
       }
-    }
 
-    // Fallback to any English voice
-    if (!bestVoice) {
-      bestVoice = voices.find(v => v.lang.startsWith('en')) || voices[0];
-    }
+      speechSynthesis.onvoiceschanged = () => {
+        const loadedVoices = speechSynthesis.getVoices();
+        this.processNativeVoices(loadedVoices);
+        this.updateState({ ttsLoadProgress: 80 });
+        resolve();
+      };
 
-    this.selectedVoice = bestVoice;
+      setTimeout(() => {
+        const fallbackVoices = speechSynthesis.getVoices();
+        if (fallbackVoices.length > 0) {
+          this.processNativeVoices(fallbackVoices);
+          this.updateState({ ttsLoadProgress: 80 });
+        }
+        resolve();
+      }, 1200);
+    });
 
-    // Build available voices list for UI
-    this.availableVoicesList = voices
+    this.nativeVoicesLoaded = true;
+  }
+
+  private processNativeVoices(voices: SpeechSynthesisVoice[]): void {
+    const best = voices.find(v => v.lang.startsWith('en') && /aria|jenny|samantha|zira|google/i.test(v.name))
+      || voices.find(v => v.lang.startsWith('en'))
+      || voices[0]
+      || null;
+
+    this.selectedVoice = best;
+
+    const nativeOptions: VoiceOption[] = voices
       .filter(v => v.lang.startsWith('en'))
       .slice(0, 10)
       .map(v => ({
-        id: v.name,
+        id: `native:${v.name}`,
         name: v.name.replace(/Microsoft |Google |Apple /g, '').split(' ')[0],
-        description: v.name,
+        description: `Browser voice: ${v.name}`,
         voice: v,
       }));
 
-    // Add "default" option
-    if (this.selectedVoice) {
-      this.availableVoicesList.unshift({
+    this.availableVoicesList = [
+      {
         id: 'default',
         name: 'Auto (Best)',
-        description: `Auto-selected: ${this.selectedVoice.name}`,
+        description: `Auto-selected: ${this.selectedVoice?.name || 'English voice'}`,
         voice: this.selectedVoice,
-      });
-    }
-
-    console.log('🎤 Available voices:', this.availableVoicesList.map(v => v.name));
-    console.log('🎤 Selected voice:', this.selectedVoice?.name);
+      },
+      ...nativeOptions,
+    ];
   }
 
   // ===========================================================================
@@ -305,16 +275,13 @@ class VoiceService {
     }
 
     if (this.state.isListening) return true;
-    if (this.state.isSpeaking) {
-      this.stopSpeaking();
-    }
+    if (this.state.isSpeaking) this.stopSpeaking();
 
     try {
       this.updateState({ currentTranscript: '' });
       this.recognition.start();
       return true;
-    } catch (error) {
-      console.error('Failed to start listening:', error);
+    } catch {
       return false;
     }
   }
@@ -326,10 +293,10 @@ class VoiceService {
 
     try {
       this.recognition.stop();
-    } catch (e) {
-      // Ignore
+    } catch {
+      // ignore
     }
-    
+
     return this.state.currentTranscript;
   }
 
@@ -342,157 +309,149 @@ class VoiceService {
   // ===========================================================================
 
   async speak(options: TTSOptions): Promise<void> {
-    const { 
-      text, 
+    const {
+      text,
       voice,
       speed = this.config.speed,
       pitch = this.config.pitch,
-      onStart, 
-      onEnd, 
-      onError 
+      onStart,
+      onEnd,
+      onError,
     } = options;
 
-    if (!text.trim()) return;
+    const cleanText = text.trim();
+    if (!cleanText) return;
 
-    // Stop any current speech or listening
     this.stopSpeaking();
+    const generationAtStart = this.speakGeneration;
     this.stopListening();
 
+    if (!this.state.ttsLoaded) {
+      const ok = await this.initializeTTS();
+      if (!ok) {
+        onError?.(new Error('TTS initialization failed'));
+        return;
+      }
+    }
+
+    this.updateState({ isSpeaking: true, status: 'speaking', error: null });
+    onStart?.();
+
     try {
-      if (!this.state.ttsLoaded) {
-        await this.initializeTTS();
-      }
-
-      this.updateState({ isSpeaking: true, status: 'speaking' });
-      onStart?.();
-
-      // Create utterance
-      const utterance = new SpeechSynthesisUtterance(text);
-      
-      // Set voice
-      if (voice && voice !== 'default') {
-        const selectedVoiceObj = this.availableVoicesList.find(v => v.id === voice);
-        if (selectedVoiceObj?.voice) {
-          utterance.voice = selectedVoiceObj.voice;
+      const chunks = this.splitTextForSpeech(cleanText.slice(0, 680));
+      for (const chunk of chunks) {
+        if (generationAtStart !== this.speakGeneration) {
+          throw new Error(INTERRUPTED_ERROR);
         }
-      } else if (this.selectedVoice) {
-        utterance.voice = this.selectedVoice;
+
+        await this.speakChunkNative(chunk, voice, speed, pitch);
       }
 
-      // Set parameters for soothing effect
-      utterance.rate = speed;          // Slower
-      utterance.pitch = pitch;         // Slightly lower
-      utterance.volume = this.config.volume;
+      if (generationAtStart !== this.speakGeneration) {
+        return;
+      }
 
-      // Setup audio visualization
-      this.startVisualization();
-
-      // Handle events
-      utterance.onend = () => {
-        this.stopVisualization();
-        this.updateState({ isSpeaking: false, status: 'ready' });
-        onEnd?.();
-      };
-
-      utterance.onerror = (event) => {
-        this.stopVisualization();
-        this.updateState({ isSpeaking: false, status: 'error' });
-        onError?.(new Error(event.error));
-      };
-
-      // Speak
-      speechSynthesis.speak(utterance);
-
+      this.updateState({ isSpeaking: false, status: 'ready' });
+      onEnd?.();
     } catch (error) {
-      console.error('TTS error:', error);
+      if (error instanceof Error && error.message === INTERRUPTED_ERROR) {
+        return;
+      }
       this.updateState({ isSpeaking: false, status: 'error' });
       onError?.(error as Error);
     }
   }
 
+  private async speakChunkNative(
+    chunk: string,
+    voice: PiperVoice | undefined,
+    speed: number,
+    pitch: number
+  ): Promise<void> {
+    const utterance = new SpeechSynthesisUtterance(chunk);
+
+    const nativeVoiceId = voice?.startsWith('native:') ? voice : null;
+    if (nativeVoiceId) {
+      const selected = this.availableVoicesList.find(v => v.id === nativeVoiceId);
+      if (selected?.voice) {
+        utterance.voice = selected.voice;
+      }
+    } else if (this.selectedVoice) {
+      utterance.voice = this.selectedVoice;
+    }
+
+    utterance.rate = Math.min(1.08, Math.max(0.85, speed));
+    utterance.pitch = Math.min(1.05, Math.max(0.82, pitch));
+    utterance.volume = this.config.volume;
+
+    await new Promise<void>((resolve, reject) => {
+      utterance.onend = () => resolve();
+      utterance.onerror = (event) => reject(new Error(event.error));
+      speechSynthesis.speak(utterance);
+    });
+  }
+
   stopSpeaking(): void {
+    this.speakGeneration += 1;
     speechSynthesis.cancel();
-    this.stopVisualization();
-    
+
     if (this.state.isSpeaking) {
-      this.updateState({ isSpeaking: false, status: this.state.ttsLoaded ? 'ready' : 'idle' });
+      this.updateState({
+        isSpeaking: false,
+        status: this.state.ttsLoaded ? 'ready' : 'idle',
+      });
     }
+  }
+
+  private splitTextForSpeech(text: string, targetChunkSize = 180): string[] {
+    const cleaned = text.replace(/\s+/g, ' ').trim();
+    if (!cleaned) return [];
+    if (cleaned.length <= targetChunkSize) return [cleaned];
+
+    const sentences = cleaned.match(/[^.!?]+[.!?]*/g)?.map(s => s.trim()).filter(Boolean) || [cleaned];
+    const chunks: string[] = [];
+    let current = '';
+
+    const pushChunk = (chunk: string) => {
+      const value = chunk.trim();
+      if (value) chunks.push(value);
+    };
+
+    for (const sentence of sentences) {
+      if (!current) {
+        current = sentence;
+        continue;
+      }
+
+      if (`${current} ${sentence}`.length <= targetChunkSize) {
+        current = `${current} ${sentence}`;
+      } else {
+        pushChunk(current);
+        current = sentence;
+      }
+    }
+
+    pushChunk(current);
+    return chunks;
   }
 
   // ===========================================================================
-  // AUDIO VISUALIZATION (Simulated for Web Speech API)
+  // VISUALIZATION DATA (best-effort synthetic for UI)
   // ===========================================================================
-
-  private startVisualization(): void {
-    try {
-      if (!this.audioContext) {
-        this.audioContext = new AudioContext();
-      }
-
-      if (this.audioContext.state === 'suspended') {
-        this.audioContext.resume();
-      }
-
-      // Create analyser for visualization
-      this.analyser = this.audioContext.createAnalyser();
-      this.analyser.fftSize = 256;
-      this.analyser.smoothingTimeConstant = 0.8;
-
-      // Create oscillator to simulate audio activity
-      // (Web Speech API doesn't give us direct audio access)
-      this.oscillator = this.audioContext.createOscillator();
-      this.gainNode = this.audioContext.createGain();
-      
-      this.oscillator.type = 'sine';
-      this.oscillator.frequency.setValueAtTime(0, this.audioContext.currentTime);
-      this.gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
-      
-      this.oscillator.connect(this.gainNode);
-      this.gainNode.connect(this.analyser);
-      // Don't connect to destination - we don't want to hear the oscillator
-      
-      this.oscillator.start();
-
-    } catch (error) {
-      console.warn('Visualization setup failed:', error);
-    }
-  }
-
-  private stopVisualization(): void {
-    if (this.oscillator) {
-      try {
-        this.oscillator.stop();
-      } catch (e) {
-        // Ignore
-      }
-      this.oscillator = null;
-    }
-    this.gainNode = null;
-  }
 
   getFrequencyData(): Uint8Array | null {
-    if (!this.analyser) return null;
-    const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
-    this.analyser.getByteFrequencyData(dataArray);
-    return dataArray;
+    if (!this.state.isSpeaking && !this.state.isListening) return null;
+
+    const data = new Uint8Array(128);
+    const time = Date.now() / 1000;
+    for (let i = 0; i < data.length; i++) {
+      data[i] = 128 + Math.sin(time * 4 + i * 0.12) * 40;
+    }
+    return data;
   }
 
   getWaveformData(): Uint8Array | null {
-    // Return simulated waveform data when speaking
-    if (!this.state.isSpeaking) return null;
-    
-    const dataArray = new Uint8Array(128);
-    const time = Date.now() / 1000;
-    
-    for (let i = 0; i < dataArray.length; i++) {
-      // Create a smooth, organic wave pattern
-      const wave1 = Math.sin(time * 3 + i * 0.1) * 30;
-      const wave2 = Math.sin(time * 5 + i * 0.15) * 20;
-      const wave3 = Math.sin(time * 7 + i * 0.05) * 10;
-      dataArray[i] = 128 + wave1 + wave2 + wave3;
-    }
-    
-    return dataArray;
+    return this.getFrequencyData();
   }
 
   // ===========================================================================
@@ -501,13 +460,6 @@ class VoiceService {
 
   setConfig(config: Partial<VoiceConfig>): void {
     this.config = { ...this.config, ...config };
-    
-    if (config.voice) {
-      const voiceOption = this.availableVoicesList.find(v => v.id === config.voice);
-      if (voiceOption?.voice) {
-        this.selectedVoice = voiceOption.voice;
-      }
-    }
   }
 
   getConfig(): VoiceConfig {
@@ -548,12 +500,6 @@ class VoiceService {
   dispose(): void {
     this.stopListening();
     this.stopSpeaking();
-    
-    if (this.audioContext) {
-      this.audioContext.close();
-      this.audioContext = null;
-    }
-
     this.listeners.clear();
   }
 }
@@ -564,3 +510,4 @@ class VoiceService {
 
 export const voiceService = new VoiceService();
 export default voiceService;
+

@@ -13,6 +13,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { authService, User, AuthResult } from '@/services/auth-service';
 import { storageService } from '@/services/storage-service';
+import { voiceService } from '@/services/voice-service-web';
 
 // =============================================================================
 // TYPES
@@ -89,6 +90,42 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     
     initAuth();
   }, []);
+
+  // Preload offline TTS after login/session restore so voice page feels instant.
+  useEffect(() => {
+    if (!user) return;
+
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let idleId: number | null = null;
+
+    const preload = async () => {
+      if (cancelled) return;
+      try {
+        await voiceService.preloadForSession();
+      } catch (error) {
+        console.warn('Voice preload failed:', error);
+      }
+    };
+
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      idleId = window.requestIdleCallback(() => {
+        preload();
+      }, { timeout: 2000 });
+    } else {
+      timeoutId = setTimeout(() => {
+        preload();
+      }, 600);
+    }
+
+    return () => {
+      cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+      if (idleId !== null && 'cancelIdleCallback' in window) {
+        window.cancelIdleCallback(idleId);
+      }
+    };
+  }, [user]);
   
   // ---------------------------------------------------------------------------
   // DASS-21 HELPERS

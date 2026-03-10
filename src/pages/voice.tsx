@@ -16,6 +16,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useVoice } from '@/hooks/use-voice';
 import { webllmService } from '@/services/webllm-service';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLocation } from 'wouter';
 import { mentalHealthPromptService } from '@/services/mental-health-prompt-service';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -43,9 +44,10 @@ import {
   Loader2,
   AlertCircle,
   Info,
+  ArrowLeft,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { PiperVoice } from '@/services/voice-service';
+import type { PiperVoice } from '@/services/voice-service-web';
 
 // =============================================================================
 // AUDIO VISUALIZER COMPONENT
@@ -166,19 +168,24 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
 // =============================================================================
 
 const VoiceTherapyPage: React.FC = () => {
+  const [, setLocation] = useLocation();
   // Auth & Mental Health Context
   const { getDASS21Results } = useAuth();
   const [dass21Results, setDASS21Results] = useState<any>(null);
 
   // Voice state
   const [selectedVoice, setSelectedVoice] = useState<PiperVoice | undefined>(undefined);
-  const [speed, setSpeed] = useState(0.9);
+  const [speed, setSpeed] = useState(0.95);
   const [showSettings, setShowSettings] = useState(false);
-  const [continuousMode, setContinuousMode] = useState(false);
+  const [continuousMode, setContinuousMode] = useState(true);
   
   // Conversation state
   const [conversation, setConversation] = useState<{ role: 'user' | 'ai'; text: string }[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const stopRequestedRef = useRef(false);
+  const activeRequestIdRef = useRef(0);
+  const continuousRestartTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const silenceSubmitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // WebLLM state
   const [llmLoaded, setLlmLoaded] = useState(false);
@@ -203,7 +210,8 @@ const VoiceTherapyPage: React.FC = () => {
     availableVoices,
     getWaveformData,
   } = useVoice({
-    autoInitialize: true,
+    // Lazy init: load heavy voice models only when user starts interacting.
+    autoInitialize: false,
     voice: selectedVoice,
   });
 
@@ -231,59 +239,142 @@ const VoiceTherapyPage: React.FC = () => {
   const handleVoiceChange = (voiceId: string) => {
     const voice = availableVoices.find(v => v.id === voiceId);
     if (voice) {
-      setSelectedVoice(voice);
-      setVoice(voice);
+      setSelectedVoice(voiceId);
+      setVoice(voiceId);
     }
+  };
+
+  const DISTRESS_SIGNAL_REGEX = /\b(anxious|anxiety|panic|depress|depression|sad|hopeless|worthless|stressed|stress|overwhelmed|overwhelm|burnout|lonely|trauma|self[\s-]?harm|suicid|hurt myself)\b/i;
+
+  const isDistressIntent = (input: string): boolean => {
+    const text = input.trim().toLowerCase();
+    return mentalHealthPromptService.containsCrisisSignals(text) || DISTRESS_SIGNAL_REGEX.test(text);
+  };
+
+  const getQuickCasualReply = (input: string): string | null => {
+    const text = input.trim().toLowerCase();
+    const compact = text.replace(/\s+/g, ' ');
+
+    if (/^(hi|hello|hey|hell)\b.*\bhow are you\b/.test(compact) || compact === 'how are you') {
+      return "Hey! I'm doing well, thanks for asking. How are you doing?";
+    }
+    if (/^(hi|hello|hey|hell)\b$/.test(compact)) {
+      return 'Hey! Good to hear from you. How is your day going?';
+    }
+    if (/^(what'?s up|whats up|sup|yo)\b/.test(compact)) {
+      return 'Not much, just here with you. What would you like to talk about?';
+    }
+
+    return null;
+  };
+
+  const compactVoiceReply = (text: string, distressMode: boolean): string => {
+    const clean = text.replace(/\s+/g, ' ').trim();
+    if (!clean) return '';
+
+    if (distressMode) {
+      return clean.slice(0, 320);
+    }
+
+    const sentences = clean.split(/(?<=[.!?])\s+/).filter(Boolean);
+    let output = sentences.slice(0, 2).join(' ').trim();
+    if (!output) output = clean;
+    if (output.length > 190) {
+      output = `${output.slice(0, 187).trimEnd()}.`;
+    }
+    return output;
   };
 
   // Process user speech and get AI response
   const processUserSpeech = useCallback(async (userText: string) => {
     if (!userText.trim()) return;
 
+    stopRequestedRef.current = false;
+    const requestId = ++activeRequestIdRef.current;
     setIsProcessing(true);
     
     // Add user message
     setConversation(prev => [...prev, { role: 'user', text: userText }]);
 
     try {
-      // Build context with mental health awareness
-      let systemPrompt = mentalHealthPromptService.generateSystemPrompt(dass21Results);
-      systemPrompt += `\n\nIMPORTANT: Keep responses SHORT (2-3 sentences max). 
-      Speak in a calm, soothing, ASMR-like tone. 
-      Be warm and comforting. Use gentle language.`;
+      const distressMode = isDistressIntent(userText);
+      const quickReply = distressMode ? null : getQuickCasualReply(userText);
+
+      let systemPrompt = '';
+      if (distressMode) {
+        systemPrompt = mentalHealthPromptService.generateSystemPrompt({
+          dass21Results,
+          sessionType: 'voice',
+        });
+        systemPrompt += `\n\nIMPORTANT VOICE STYLE:
+        - Keep responses short (2-3 sentences max).
+        - Speak in a calm, soothing tone.
+        - Be empathetic and practical.
+        - Do not over-explain.`;
+      } else {
+        systemPrompt = `You are MindScribe, a friendly voice companion.
+
+        Rules:
+        - Reply naturally like normal conversation.
+        - Keep replies short (1-2 sentences).
+        - Match the user's intent directly.
+        - For greetings/small talk, greet casually.
+        - Do NOT mention therapy, assessments, coping techniques, or mental health unless the user explicitly asks.
+        - Avoid assumptions about the user's emotional state.`;
+      }
 
       // Generate AI response using webllmService async generator
-      let aiResponse = '';
-      const generator = webllmService.generateResponse(
-        [{ role: 'user', content: userText }],
-        { maxTokens: 100, temperature: 0.7, topP: 0.9 },
-        systemPrompt
-      );
+      let aiResponse = quickReply || '';
+      if (!quickReply) {
+        const generator = webllmService.generateResponse(
+          [{ role: 'user', content: userText }],
+          distressMode
+            ? { maxTokens: 80, temperature: 0.55, topP: 0.9 }
+            : { maxTokens: 56, temperature: 0.7, topP: 0.92 },
+          systemPrompt
+        );
 
-      for await (const token of generator) {
-        aiResponse += token;
+        for await (const token of generator) {
+          if (stopRequestedRef.current || requestId !== activeRequestIdRef.current) {
+            break;
+          }
+          aiResponse += token;
+        }
+      }
+
+      if (stopRequestedRef.current || requestId !== activeRequestIdRef.current) {
+        return;
       }
 
       // Clean up response
-      aiResponse = aiResponse.trim();
+      aiResponse = compactVoiceReply(aiResponse, distressMode);
+      if (!aiResponse) return;
       
       // Add AI message
       setConversation(prev => [...prev, { role: 'ai', text: aiResponse }]);
 
       // Speak the response
-      await speak(aiResponse);
+      await speak(aiResponse, { speed, pitch: 0.9 });
 
       // If continuous mode, start listening again after speaking
-      if (continuousMode && !isSpeaking) {
-        setTimeout(() => startListening(), 500);
+      if (continuousMode && !isSpeaking && !stopRequestedRef.current) {
+        continuousRestartTimeoutRef.current = setTimeout(() => {
+          if (!stopRequestedRef.current) {
+            startListening();
+          }
+        }, 500);
       }
 
     } catch (err) {
-      console.error('Error processing speech:', err);
+      if (!stopRequestedRef.current) {
+        console.error('Error processing speech:', err);
+      }
     } finally {
-      setIsProcessing(false);
+      if (requestId === activeRequestIdRef.current) {
+        setIsProcessing(false);
+      }
     }
-  }, [speak, dass21Results, continuousMode, isSpeaking, startListening]);
+  }, [speak, speed, dass21Results, continuousMode, isSpeaking, startListening]);
 
   // Handle push-to-talk
   const handlePushToTalk = async () => {
@@ -297,12 +388,84 @@ const VoiceTherapyPage: React.FC = () => {
     }
   };
 
+  // One-tap continuous mode (no hold-to-talk needed)
+  const handleContinuousToggle = async () => {
+    if (isListening) {
+      await stopListening();
+      return;
+    }
+
+    if (!isSpeaking && !isProcessing && !isTranscribing) {
+      await startListening();
+    }
+  };
+
   // Handle stop everything
   const handleStop = async () => {
+    stopRequestedRef.current = true;
+    activeRequestIdRef.current += 1;
+    if (continuousRestartTimeoutRef.current) {
+      clearTimeout(continuousRestartTimeoutRef.current);
+      continuousRestartTimeoutRef.current = null;
+    }
+    if (silenceSubmitTimeoutRef.current) {
+      clearTimeout(silenceSubmitTimeoutRef.current);
+      silenceSubmitTimeoutRef.current = null;
+    }
+    await webllmService.stopGeneration();
     await stopListening();
     stopSpeaking();
     setIsProcessing(false);
   };
+
+  // Auto-submit after 1.5s silence in continuous mode
+  useEffect(() => {
+    if (!continuousMode || !isListening || isProcessing || isSpeaking) {
+      if (silenceSubmitTimeoutRef.current) {
+        clearTimeout(silenceSubmitTimeoutRef.current);
+        silenceSubmitTimeoutRef.current = null;
+      }
+      return;
+    }
+
+    if (!transcript.trim()) return;
+
+    if (silenceSubmitTimeoutRef.current) {
+      clearTimeout(silenceSubmitTimeoutRef.current);
+    }
+
+    silenceSubmitTimeoutRef.current = setTimeout(async () => {
+      if (stopRequestedRef.current || !continuousMode) return;
+
+      const finalTranscript = await stopListening();
+      if (finalTranscript.trim()) {
+        processUserSpeech(finalTranscript);
+      } else {
+        startListening();
+      }
+    }, 1500);
+
+    return () => {
+      if (silenceSubmitTimeoutRef.current) {
+        clearTimeout(silenceSubmitTimeoutRef.current);
+        silenceSubmitTimeoutRef.current = null;
+      }
+    };
+  }, [continuousMode, isListening, isProcessing, isSpeaking, transcript, stopListening, startListening, processUserSpeech]);
+
+  useEffect(() => {
+    return () => {
+      stopRequestedRef.current = true;
+      if (continuousRestartTimeoutRef.current) {
+        clearTimeout(continuousRestartTimeoutRef.current);
+      }
+      if (silenceSubmitTimeoutRef.current) {
+        clearTimeout(silenceSubmitTimeoutRef.current);
+      }
+      webllmService.stopGeneration();
+      stopSpeaking();
+    };
+  }, [stopSpeaking]);
 
   // Determine visualizer variant
   const getVisualizerVariant = (): 'listening' | 'speaking' | 'idle' => {
@@ -331,6 +494,18 @@ const VoiceTherapyPage: React.FC = () => {
           animate={{ opacity: 1, y: 0 }}
           className="text-center mb-8"
         >
+          <div className="flex items-center justify-between mb-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setLocation('/')}
+              className="text-slate-300 hover:text-white hover:bg-slate-800/60"
+            >
+              <ArrowLeft className="h-4 w-4 mr-1" />
+              Back
+            </Button>
+            <div className="w-16" />
+          </div>
           <div className="flex items-center justify-center gap-3 mb-4">
             <Moon className="h-8 w-8 text-purple-400" />
             <h1 className="text-3xl font-light tracking-wide">Voice Therapy</h1>
@@ -356,7 +531,7 @@ const VoiceTherapyPage: React.FC = () => {
             {sttLoaded && (
               <Badge variant="outline" className="bg-green-500/10 text-green-400 border-green-500/30">
                 <Mic className="h-3 w-3 mr-1" />
-                Whisper Ready
+                Mic Ready
               </Badge>
             )}
           </div>
@@ -443,10 +618,12 @@ const VoiceTherapyPage: React.FC = () => {
                     >
                       <p className="text-lg font-light">
                         {isLoading 
-                          ? `Loading Whisper... ${loadProgress}%` 
-                          : isReady 
-                            ? 'Press and hold to speak'
-                            : 'Initializing voice...'}
+                          ? `Loading Voice... ${loadProgress}%` 
+                          : isReady
+                            ? (continuousMode
+                              ? 'Tap once to start. Auto-send after 1.5s silence.'
+                              : 'Press and hold to speak')
+                            : 'Preparing voice session...'}
                       </p>
                       {isLoading && (
                         <div className="w-48 h-1 bg-slate-700 rounded-full mx-auto mt-3 overflow-hidden">
@@ -468,24 +645,25 @@ const VoiceTherapyPage: React.FC = () => {
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  onMouseDown={handlePushToTalk}
-                  onMouseUp={async () => {
+                  onClick={continuousMode ? handleContinuousToggle : undefined}
+                  onMouseDown={!continuousMode ? handlePushToTalk : undefined}
+                  onMouseUp={!continuousMode ? async () => {
                     if (isListening) {
                       const finalTranscript = await stopListening();
                       if (finalTranscript.trim()) {
                         processUserSpeech(finalTranscript);
                       }
                     }
-                  }}
-                  onTouchStart={handlePushToTalk}
-                  onTouchEnd={async () => {
+                  } : undefined}
+                  onTouchStart={!continuousMode ? handlePushToTalk : undefined}
+                  onTouchEnd={!continuousMode ? async () => {
                     if (isListening) {
                       const finalTranscript = await stopListening();
                       if (finalTranscript.trim()) {
                         processUserSpeech(finalTranscript);
                       }
                     }
-                  }}
+                  } : undefined}
                   disabled={!llmLoaded || isProcessing || isSpeaking || isLoading || isTranscribing}
                   className={cn(
                     "w-24 h-24 rounded-full flex items-center justify-center transition-all duration-300",
@@ -599,7 +777,7 @@ const VoiceTherapyPage: React.FC = () => {
                     {/* Voice selection */}
                     <div className="space-y-2">
                       <Label className="text-slate-300">Voice</Label>
-                      <Select value={currentVoice?.id || 'amy'} onValueChange={handleVoiceChange}>
+                      <Select value={currentVoice || 'default'} onValueChange={handleVoiceChange}>
                         <SelectTrigger className="bg-slate-700/50 border-slate-600">
                           <SelectValue />
                         </SelectTrigger>
@@ -648,8 +826,8 @@ const VoiceTherapyPage: React.FC = () => {
                     <div className="flex items-start gap-2 p-3 bg-slate-700/30 rounded-lg">
                       <Info className="h-4 w-4 text-blue-400 mt-0.5 flex-shrink-0" />
                       <p className="text-xs text-slate-400">
-                        Voice model downloads once (~20MB) and runs locally for privacy. 
-                        No data leaves your device.
+                        Offline neural TTS is cached locally after first download.
+                        Continuous mode auto-sends after 1.5s silence for natural conversation.
                       </p>
                     </div>
                   </CardContent>

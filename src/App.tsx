@@ -96,7 +96,7 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider defaultTheme="light" storageKey="mindscribe-theme">
+      <ThemeProvider defaultTheme="dark" storageKey="mindscribe-theme">
         <AuthProvider>
           <TooltipProvider>
             <Toaster />
