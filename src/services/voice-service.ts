@@ -14,7 +14,10 @@ import { pipeline, env } from '@huggingface/transformers';
 import { piperGenerate, HF_BASE } from 'piper-wasm';
 
 // Configure transformers.js for browser
-env.allowLocalModels = false;
+env.allowLocalModels = true;
+// Allow remote fallback on first install so models can be downloaded and cached.
+env.allowRemoteModels = true;
+env.localModelPath = '/models/transformers';
 env.useBrowserCache = true;
 
 // =============================================================================
@@ -159,7 +162,12 @@ class VoiceService {
   private mediaStream: MediaStream | null = null;
   
   // Piper base path for WASM assets
-  private piperBasePath = '/piper';
+  private piperBasePath = '/wasm/piper';
+
+  // Local model roots for fully offline usage.
+  private whisperModelId = 'onnx-community/whisper-tiny.en';
+  private localPiperModelBasePath = '/models/piper';
+  private remotePiperModelBasePath = HF_BASE;
   
   private state: VoiceServiceState = {
     status: 'idle',
@@ -215,7 +223,7 @@ class VoiceService {
       // Using q8 (int8) quantization for best compatibility
       this.whisperPipeline = await pipeline(
         'automatic-speech-recognition',
-        'onnx-community/whisper-tiny.en',
+        this.whisperModelId,
         {
           device,
           dtype: 'q8', // int8 quantization - best compatibility
@@ -236,7 +244,7 @@ class VoiceService {
       console.error('Failed to initialize STT:', error);
       this.updateState({ 
         status: 'error', 
-        error: 'Failed to load speech recognition model',
+        error: 'Failed to load Whisper model. Connect once to download model files, then voice works offline.',
       });
       return false;
     }
@@ -278,6 +286,11 @@ class VoiceService {
     }
     
     return sttOk && ttsOk;
+  }
+
+  // Backward-compatible preload API used by auth/session bootstrap.
+  async preloadForSession(): Promise<boolean> {
+    return this.initialize();
   }
 
   // ===========================================================================
@@ -448,31 +461,45 @@ class VoiceService {
     const piperPhonemizeDataUrl = `${this.piperBasePath}/piper_phonemize.data`;
     const workerUrl = `${this.piperBasePath}/piper_worker.js`;
     
-    // Model URLs from HuggingFace
-    const modelUrl = `${HF_BASE}${voice.modelPath}`;
-    const modelConfigUrl = `${HF_BASE}${voice.modelPath}.json`;
+    // Local-first model URLs with remote fallback for first-run download.
+    const localModelUrl = `${this.localPiperModelBasePath}/${voice.id}.onnx`;
+    const localModelConfigUrl = `${this.localPiperModelBasePath}/${voice.id}.onnx.json`;
+    const remoteModelUrl = `${this.remotePiperModelBasePath}${voice.modelPath}`;
+    const remoteModelConfigUrl = `${this.remotePiperModelBasePath}${voice.modelPath}.json`;
 
     if (!isWarmup) {
       console.log(`[Piper] Synthesizing: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
     }
 
-    const result = await piperGenerate(
-      piperPhonemizeJsUrl,
-      piperPhonemizeWasmUrl,
-      piperPhonemizeDataUrl,
-      workerUrl,
-      modelUrl,
-      modelConfigUrl,
-      null, // speakerId (null for single-speaker models)
-      text,
-      (progress: number) => {
-        if (!isWarmup) {
-          console.log(`TTS Progress: ${Math.round(progress * 100)}%`);
-        }
-      },
-      null, // phonemeIds (let piper-wasm generate them using espeak-ng)
-      false // inferEmotion
-    );
+    const runSynthesis = async (modelUrl: string, modelConfigUrl: string) => {
+      return piperGenerate(
+        piperPhonemizeJsUrl,
+        piperPhonemizeWasmUrl,
+        piperPhonemizeDataUrl,
+        workerUrl,
+        modelUrl,
+        modelConfigUrl,
+        null, // speakerId (null for single-speaker models)
+        text,
+        (progress: number) => {
+          if (!isWarmup) {
+            console.log(`TTS Progress: ${Math.round(progress * 100)}%`);
+          }
+        },
+        null, // phonemeIds (let piper-wasm generate them using espeak-ng)
+        false // inferEmotion
+      );
+    };
+
+    let result;
+    try {
+      result = await runSynthesis(localModelUrl, localModelConfigUrl);
+    } catch (localError) {
+      if (!isWarmup) {
+        console.warn('[Piper] Local model not found. Downloading from remote for first-run cache...');
+      }
+      result = await runSynthesis(remoteModelUrl, remoteModelConfigUrl);
+    }
 
     return result.file;
   }

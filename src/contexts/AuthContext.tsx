@@ -13,7 +13,9 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { authService, User, AuthResult } from '@/services/auth-service';
 import { storageService } from '@/services/storage-service';
-import { voiceService } from '@/services/voice-service-web';
+import { voiceService } from '@/services/voice-service';
+import { deviceMemoryService } from '@/services/device-memory-service';
+import { journalService } from '@/services/journal-service';
 
 // =============================================================================
 // TYPES
@@ -91,6 +93,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     initAuth();
   }, []);
 
+  useEffect(() => {
+    journalService.setUserId(user?.username ?? null);
+  }, [user?.username]);
+
   // Preload offline TTS after login/session restore so voice page feels instant.
   useEffect(() => {
     if (!user) return;
@@ -135,6 +141,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       const assessment = await storageService.assessments.get(`dass21_${username}`);
       setHasCompletedDASS21(!!assessment);
+
+      if (assessment) {
+        void deviceMemoryService.upsertAssessment(username, assessment);
+      }
     } catch (error) {
       console.error('Error checking DASS-21 status:', error);
       setHasCompletedDASS21(false);
@@ -146,6 +156,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     
     try {
       await storageService.assessments.save(`dass21_${user.username}`, results);
+      await deviceMemoryService.upsertAssessment(user.username, results);
       setHasCompletedDASS21(true);
       return true;
     } catch (error) {

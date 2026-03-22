@@ -1,13 +1,14 @@
 {
   "name": "mindscribe-client",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "postinstall": "node scripts/fix-piper-wasm.js"
+    "download:voice-models": "node scripts/download-voice-models.js",
+    "postinstall": "node scripts/fix-piper-wasm.js && node scripts/download-voice-models.js"
   },
   "dependencies": {
     "@huggingface/transformers": "^3.8.1",
@@ -40,6 +41,7 @@
     "@radix-ui/react-toggle-group": "^1.1.11",
     "@radix-ui/react-tooltip": "^1.2.7",
     "@tanstack/react-query": "^5.85.0",
+    "@tauri-apps/api": "^2.9.1",
     "@tauri-apps/cli": "^2.9.6",
     "@vitejs/plugin-react": "^4.7.0",
     "class-variance-authority": "^0.7.1",

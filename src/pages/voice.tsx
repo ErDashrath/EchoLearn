@@ -18,6 +18,7 @@ import { webllmService } from '@/services/webllm-service';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocation } from 'wouter';
 import { mentalHealthPromptService } from '@/services/mental-health-prompt-service';
+import { deviceMemoryService } from '@/services/device-memory-service';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -47,7 +48,7 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { PiperVoice } from '@/services/voice-service-web';
+type PiperVoice = string;
 
 // =============================================================================
 // AUDIO VISUALIZER COMPONENT
@@ -170,7 +171,7 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({
 const VoiceTherapyPage: React.FC = () => {
   const [, setLocation] = useLocation();
   // Auth & Mental Health Context
-  const { getDASS21Results } = useAuth();
+  const { user, getDASS21Results } = useAuth();
   const [dass21Results, setDASS21Results] = useState<any>(null);
 
   // Voice state
@@ -299,6 +300,19 @@ const VoiceTherapyPage: React.FC = () => {
     try {
       const distressMode = isDistressIntent(userText);
       const quickReply = distressMode ? null : getQuickCasualReply(userText);
+      const directMemoryAnswer = user?.username
+        ? await deviceMemoryService.answerFactQuestion(user.username, userText)
+        : null;
+      const retrievedContext = user?.username
+        ? await deviceMemoryService.buildContextForTurn({
+            userId: user.username,
+            query: userText,
+            limit: 6,
+          })
+        : { prompt: '', items: [] };
+      const retrievedMemoryAddition = retrievedContext.prompt
+        ? `\n\n${retrievedContext.prompt}`
+        : '';
 
       let systemPrompt = '';
       if (distressMode) {
@@ -311,6 +325,7 @@ const VoiceTherapyPage: React.FC = () => {
         - Speak in a calm, soothing tone.
         - Be empathetic and practical.
         - Do not over-explain.`;
+        systemPrompt += retrievedMemoryAddition;
       } else {
         systemPrompt = `You are MindScribe, a friendly voice companion.
 
@@ -321,13 +336,19 @@ const VoiceTherapyPage: React.FC = () => {
         - For greetings/small talk, greet casually.
         - Do NOT mention therapy, assessments, coping techniques, or mental health unless the user explicitly asks.
         - Avoid assumptions about the user's emotional state.`;
+        systemPrompt += retrievedMemoryAddition;
       }
 
       // Generate AI response using webllmService async generator
-      let aiResponse = quickReply || '';
-      if (!quickReply) {
+      let aiResponse = directMemoryAnswer || quickReply || '';
+      if (!directMemoryAnswer && !quickReply) {
+        const recentConversationHistory = conversation.slice(-4).map((message) => ({
+          role: message.role === 'user' ? 'user' : 'assistant',
+          content: message.text,
+        }));
+
         const generator = webllmService.generateResponse(
-          [{ role: 'user', content: userText }],
+          [...recentConversationHistory, { role: 'user', content: userText }],
           distressMode
             ? { maxTokens: 80, temperature: 0.55, topP: 0.9 }
             : { maxTokens: 56, temperature: 0.7, topP: 0.92 },
@@ -374,7 +395,7 @@ const VoiceTherapyPage: React.FC = () => {
         setIsProcessing(false);
       }
     }
-  }, [speak, speed, dass21Results, continuousMode, isSpeaking, startListening]);
+  }, [speak, speed, dass21Results, continuousMode, isSpeaking, startListening, user?.username, conversation]);
 
   // Handle push-to-talk
   const handlePushToTalk = async () => {

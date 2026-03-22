@@ -2,7 +2,7 @@
  * F012-F016: Voice Therapy Hook
  * 
  * React hook for voice interactions in therapy sessions.
- * Provides easy-to-use interface for browser STT and Web Speech API TTS.
+ * Provides easy-to-use interface for offline STT/TTS.
  * 
  * @module hooks/use-voice
  */
@@ -11,13 +11,13 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   voiceService, 
   VoiceServiceState, 
-  PiperVoice, 
+  PiperVoice,
   TTSOptions
-} from '@/services/voice-service-web';
+} from '@/services/voice-service';
 
 export interface UseVoiceOptions {
   autoInitialize?: boolean;
-  voice?: PiperVoice;
+  voice?: string;
   onTranscript?: (transcript: string) => void;
   onSpeakStart?: () => void;
   onSpeakEnd?: () => void;
@@ -45,9 +45,9 @@ export interface UseVoiceReturn {
   stopSpeaking: () => void;
   
   // Configuration
-  setVoice: (voice: PiperVoice) => void;
-  currentVoice: PiperVoice;
-  availableVoices: { id: PiperVoice; name: string; description: string }[];
+  setVoice: (voiceId: string) => void;
+  currentVoice: string;
+  availableVoices: { id: string; name: string; description: string }[];
   
   // Visualization
   getFrequencyData: () => Uint8Array | null;
@@ -75,18 +75,21 @@ export function useVoice(options: UseVoiceOptions = {}): UseVoiceReturn {
 
   // Auto-initialize if requested
   useEffect(() => {
-    if (autoInitialize && !state.ttsLoaded && !initializingRef.current) {
+    if (autoInitialize && (!state.ttsLoaded || !state.sttLoaded) && !initializingRef.current) {
       initializingRef.current = true;
-      voiceService.initializeTTS().finally(() => {
+      voiceService.initialize().finally(() => {
         initializingRef.current = false;
       });
     }
-  }, [autoInitialize, state.ttsLoaded]);
+  }, [autoInitialize, state.ttsLoaded, state.sttLoaded]);
 
   // Set initial voice
   useEffect(() => {
     if (voice) {
-      voiceService.setConfig({ voice });
+      const selected = voiceService.getAvailableVoices().find((item) => item.id === voice);
+      if (selected) {
+        voiceService.setConfig({ voice: selected });
+      }
     }
   }, [voice]);
 
@@ -100,11 +103,11 @@ export function useVoice(options: UseVoiceOptions = {}): UseVoiceReturn {
 
   // Actions
   const initialize = useCallback(async (): Promise<boolean> => {
-    return voiceService.initializeTTS();
+    return voiceService.initialize();
   }, []);
 
   const startListening = useCallback(async (): Promise<boolean> => {
-    return Promise.resolve(voiceService.startListening());
+    return voiceService.startListening();
   }, []);
 
   const stopListening = useCallback(async (): Promise<string> => {
@@ -132,8 +135,11 @@ export function useVoice(options: UseVoiceOptions = {}): UseVoiceReturn {
     voiceService.stopSpeaking();
   }, []);
 
-  const setVoice = useCallback((newVoice: PiperVoice) => {
-    voiceService.setConfig({ voice: newVoice });
+  const setVoice = useCallback((voiceId: string) => {
+    const selected = voiceService.getAvailableVoices().find((item) => item.id === voiceId);
+    if (selected) {
+      voiceService.setConfig({ voice: selected });
+    }
   }, []);
 
   const getFrequencyData = useCallback(() => {
@@ -145,19 +151,19 @@ export function useVoice(options: UseVoiceOptions = {}): UseVoiceReturn {
   }, []);
 
   // Compute derived state
-  const isLoading = state.status === 'loading';
-  const isReady = state.ttsLoaded;
+  const isLoading = state.status === 'loading-stt' || state.status === 'loading-tts';
+  const isReady = state.ttsLoaded && state.sttLoaded;
 
   return {
     // State
     isListening: state.isListening,
     isSpeaking: state.isSpeaking,
-    isTranscribing: false,
+    isTranscribing: state.isTranscribing,
     isLoading,
     isReady,
-    sttLoaded: state.sttSupported,
+    sttLoaded: state.sttLoaded,
     ttsLoaded: state.ttsLoaded,
-    loadProgress: state.ttsLoadProgress,
+    loadProgress: state.loadProgress,
     error: state.error,
     transcript: state.currentTranscript,
     status: state.status,
@@ -171,8 +177,12 @@ export function useVoice(options: UseVoiceOptions = {}): UseVoiceReturn {
     
     // Configuration
     setVoice,
-    currentVoice: voiceService.getConfig().voice,
-    availableVoices: voiceService.getAvailableVoices(),
+    currentVoice: voiceService.getConfig().voice.id,
+    availableVoices: voiceService.getAvailableVoices().map((voiceOption: PiperVoice) => ({
+      id: voiceOption.id,
+      name: voiceOption.name,
+      description: voiceOption.description,
+    })),
     
     // Visualization
     getFrequencyData,
