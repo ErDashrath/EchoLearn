@@ -31,7 +31,8 @@ import {
   Sparkles
 } from "lucide-react";
 import { TTSToggle } from "@/components/TTSToggle";
-import { webllmService, type WebLLMModel } from "@/services/webllm-service";
+import aiService from "@/services/ai-service";
+import type { AIModel } from "@/services/providers/ai-provider";
 import type { ChatMode, FocusMode } from "@/types/schema";
 import type { ChatSession } from "@/services/chat-memory-service";
 
@@ -106,26 +107,26 @@ export function Sidebar({
   const [customPrompt, setCustomPrompt] = useState(initialCustomPrompt);
   const [isPromptEnabled, setIsPromptEnabled] = useState(initialCustomEnabled);
   const [isSavingPrompt, setIsSavingPrompt] = useState(false);
-
-  const availableModels = webllmService.getAvailableModels();
+  const [availableModels, setAvailableModels] = useState<AIModel[]>([]);
 
   // Update cached models and active model state
   useEffect(() => {
     const updateModels = async () => {
       try {
-        const cached = await webllmService.getCachedModelsAsync();
+        const models = await aiService.getAvailableModels();
+        setAvailableModels(models);
+
+        const cached = await aiService.getCachedModelsAsync();
         setCachedModels(cached);
         
-        // Only update active model if it's not currently null (deactivated)
-        const currentActive = webllmService.getActiveModel();
+        const currentActive = aiService.getActiveModel();
         setActiveModel(currentActive);
       } catch (error) {
         console.error('Error updating models:', error);
-        const cached = webllmService.getCachedModels();
+        const cached = aiService.getCachedModels();
         setCachedModels(cached);
         
-        // Fallback with same logic - respect deactivated state
-        const currentActive = webllmService.getActiveModel();
+        const currentActive = aiService.getActiveModel();
         setActiveModel(currentActive);
       }
     };
@@ -136,18 +137,16 @@ export function Sidebar({
     return () => clearInterval(interval);
   }, []);
 
-  const handleModelDownload = async (model: WebLLMModel) => {
+  const handleModelDownload = async (model: AIModel) => {
     if (downloadingModel) return;
 
     setDownloadingModel(model.id);
     setDownloadProgress({ progress: 0, text: 'Preparing...' });
 
-    webllmService.setProgressCallback((progress) => {
-      setDownloadProgress(progress);
-    });
-
     try {
-      const success = await webllmService.loadModel(model.id);
+      const success = await aiService.loadModel(model.id, (progress) => {
+        setDownloadProgress(progress);
+      });
       if (success) {
         setActiveModel(model.id);
         if (onModelSelect) {
@@ -157,23 +156,21 @@ export function Sidebar({
     } finally {
       setDownloadingModel(null);
       setDownloadProgress(null);
-      webllmService.clearProgressCallback();
     }
   };
 
   const handleModelSelect = async (modelId: string) => {
     if (activeModel === modelId) {
       // Deactivate current model
-      await webllmService.deactivateModel();
+      await aiService.deactivateModel();
       setActiveModel(null);
       return;
     }
 
     try {
-      const success = await webllmService.loadModel(modelId);
+      const success = await aiService.loadModel(modelId);
       if (success) {
-        // Set active model in the service
-        webllmService.setActiveModel(modelId);
+        aiService.setActiveModel(modelId);
         setActiveModel(modelId);
         if (onModelSelect) {
           onModelSelect(modelId);
@@ -406,7 +403,7 @@ export function Sidebar({
                           size="sm"
                           onClick={() => {
                             if (confirm('Clear all downloaded models? This will free up storage space.')) {
-                              webllmService.clearModelCache();
+                            aiService.clearModelCache();
                               window.location.reload();
                             }
                           }}

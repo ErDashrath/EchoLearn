@@ -8,7 +8,7 @@
  */
 
 import localforage from 'localforage';
-import { webllmService } from './webllm-service';
+import { aiService } from './ai-service';
 
 // =============================================================================
 // TYPES
@@ -201,8 +201,8 @@ class JournalService {
     const entry = await this.getEntry(id);
     if (!entry) return null;
 
-    if (!webllmService.isModelLoaded()) {
-      console.warn('WebLLM not loaded, cannot analyze');
+    if (!aiService.isModelLoaded()) {
+      console.warn('AI model not loaded, cannot analyze');
       return null;
     }
 
@@ -234,7 +234,7 @@ Respond with ONLY the JSON, no other text.`;
 
     try {
       let response = '';
-      const generator = webllmService.generateResponse(
+      const generator = aiService.generateResponse(
         [{ role: 'user', content: prompt }],
         { maxTokens: 500, temperature: 0.3, topP: 0.9 }
       );

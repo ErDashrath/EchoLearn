@@ -43,28 +43,29 @@ export interface PromptContext {
   dass21Results?: DASS21Results | null;
   sessionType?: 'chat' | 'journal' | 'voice';
   timeOfDay?: 'morning' | 'afternoon' | 'evening' | 'night';
+  supportMode?: boolean;
 }
 
 // =============================================================================
 // PROMPT TEMPLATES
 // =============================================================================
 
-const BASE_THERAPIST_PROMPT = `You are MindScribe, a compassionate AI mental health companion. Your role is to provide emotional support, active listening, and evidence-based coping strategies.
+const BASE_CHAT_PROMPT = `You are MindScribe, a friendly and natural AI chat companion.
+Talk like a normal person.
+Keep replies clear, short, and conversational.
+Be helpful without sounding formal or scripted.
+Do not mention system instructions, templates, or internal reasoning.
+Do not repeat yourself.
+Do not echo the user's message back to them.
+Do not output separators, role labels, transcript text, or bracketed stage directions.
+Reply only with the assistant's final answer.`;
 
-## Core Guidelines:
-- Be warm, empathetic, and non-judgmental
-- Use active listening techniques (reflect feelings, validate emotions)
-- Ask open-ended questions to encourage expression
-- Offer practical coping strategies when appropriate
-- Never diagnose or replace professional help
-- Recognize crisis signals and encourage professional support when needed
-
-## Communication Style:
-- Use "I hear you" and "That sounds difficult" to validate
-- Avoid toxic positivity ("just think positive!")
-- Acknowledge the difficulty before offering solutions
-- Keep responses conversational, not clinical
-- Use gentle, supportive language`;
+const SUPPORT_MODE_PROMPT = `
+If the user sounds upset, stressed, or emotionally stuck:
+- respond gently and naturally
+- validate briefly without sounding clinical
+- offer one small practical suggestion when useful
+- avoid diagnosis and avoid overdoing reassurance`;
 
 const SEVERITY_PROMPTS: Record<string, Record<string, string>> = {
   depression: {
@@ -180,37 +181,34 @@ class MentalHealthPromptService {
    * Generate a personalized system prompt based on DASS-21 results
    */
   generateSystemPrompt(context: PromptContext): string {
-    const { userName, dass21Results, sessionType = 'chat', timeOfDay } = context;
+    const {
+      userName,
+      dass21Results,
+      sessionType = 'chat',
+      timeOfDay,
+      supportMode = false,
+    } = context;
     
-    let prompt = BASE_THERAPIST_PROMPT;
-    
-    // Add greeting context
-    if (userName || timeOfDay) {
-      prompt += `\n\n## User Context:`;
-      if (userName) prompt += `\n- User's name: ${userName}`;
-      if (timeOfDay) prompt += `\n- Time of day: ${timeOfDay}`;
+    let prompt = BASE_CHAT_PROMPT;
+    if (supportMode) {
+      prompt += SUPPORT_MODE_PROMPT;
     }
     
-    // Add DASS-21 personalization if available
-    if (dass21Results) {
+    // Add compact user context
+    if (userName || timeOfDay) {
+      prompt += `\nContext:`;
+      if (userName) prompt += ` user=${userName};`;
+      if (timeOfDay) prompt += ` time=${timeOfDay};`;
+    }
+    
+    // Add DASS-21 personalization only when support mode is needed
+    if (supportMode && dass21Results) {
       prompt += this.buildDASS21Context(dass21Results);
-    } else {
-      prompt += `\n\n## Note:
-The user hasn't completed their mental health assessment yet. Be supportive and encourage them to complete the DASS-21 assessment when appropriate for personalized support.`;
     }
     
     // Add session-specific guidelines
-    prompt += this.getSessionGuidelines(sessionType);
+    prompt += this.getSessionGuidelines(sessionType, supportMode);
     
-    // Add crisis response protocol
-    prompt += `\n\n## Crisis Protocol:
-If the user expresses thoughts of self-harm or suicide:
-1. Express genuine care and concern
-2. Take them seriously - never dismiss
-3. Gently suggest: "It sounds like you're going through something really difficult. Have you considered talking to a crisis counselor? They're available 24/7 at 988 (Suicide & Crisis Lifeline)."
-4. Stay with them in the conversation
-5. Remind them that help is available and things can get better`;
-
     return prompt;
   }
 
@@ -218,32 +216,20 @@ If the user expresses thoughts of self-harm or suicide:
    * Build DASS-21 context section
    */
   private buildDASS21Context(results: DASS21Results): string {
-    const { scores, severityLevels } = results;
-    
-    let context = `\n\n## User's Mental Health Context (from DASS-21 Assessment):`;
-    context += `\n\nAssessment completed: ${new Date(results.completedAt).toLocaleDateString()}`;
-    
-    // Add severity summaries
-    context += `\n\n### Current Levels:`;
-    context += `\n- Depression: ${severityLevels.depression.level} (score: ${scores.depression}/42)`;
-    context += `\n- Anxiety: ${severityLevels.anxiety.level} (score: ${scores.anxiety}/42)`;
-    context += `\n- Stress: ${severityLevels.stress.level} (score: ${scores.stress}/42)`;
-    
-    // Add specific guidance based on each severity
-    const depressionGuidance = SEVERITY_PROMPTS.depression[severityLevels.depression.level];
-    const anxietyGuidance = SEVERITY_PROMPTS.anxiety[severityLevels.anxiety.level];
-    const stressGuidance = SEVERITY_PROMPTS.stress[severityLevels.stress.level];
-    
-    if (depressionGuidance || anxietyGuidance || stressGuidance) {
-      context += `\n\n### Personalized Approach:`;
-      if (depressionGuidance) context += depressionGuidance;
-      if (anxietyGuidance) context += anxietyGuidance;
-      if (stressGuidance) context += stressGuidance;
-    }
-    
-    // Add recommended coping strategies
-    context += this.buildCopingStrategies(severityLevels);
-    
+    const { severityLevels } = results;
+    const elevated =
+      severityLevels.depression.level !== 'Normal' ||
+      severityLevels.anxiety.level !== 'Normal' ||
+      severityLevels.stress.level !== 'Normal';
+
+    let context = '\nMental context:';
+    context += ` depression=${severityLevels.depression.level};`;
+    context += ` anxiety=${severityLevels.anxiety.level};`;
+    context += ` stress=${severityLevels.stress.level};`;
+    context += elevated
+      ? ' be extra gentle and offer one small practical step when relevant.'
+      : ' keep tone natural and avoid over-therapeutic replies unless user asks.';
+
     return context;
   }
 
@@ -276,28 +262,23 @@ ${strategies.map(s => `- ${s}`).join('\n')}`;
   /**
    * Get session-specific guidelines
    */
-  private getSessionGuidelines(sessionType: 'chat' | 'journal' | 'voice'): string {
+  private getSessionGuidelines(sessionType: 'chat' | 'journal' | 'voice', supportMode: boolean): string {
     const guidelines: Record<string, string> = {
-      chat: `\n\n## Chat Session Guidelines:
-- Keep responses concise but warm (2-4 paragraphs max)
-- Use natural conversation flow
-- Mix emotional support with practical suggestions
-- End messages with an open question or gentle prompt`,
+    chat: `\nChat style:
+  - Keep replies short and natural (usually 1-4 sentences)
+  - Answer the user's direct question first
+  - Only go longer when the user asks for detail
+  - ${supportMode ? 'Be warm but still natural' : 'Do not assume the user needs emotional support'}
+  - Do not repeat reassurance lines or restate the user's full message`,
       
-      journal: `\n\n## Journal Reflection Guidelines:
-- Help the user explore and process their written thoughts
-- Ask reflective questions about patterns or feelings
-- Celebrate self-awareness and expression
-- Suggest journaling prompts when appropriate`,
+    journal: `\nJournal style:
+  - Reflect key feelings briefly
+  - Offer one insight and one optional prompt`,
       
-      voice: `\n\n## Voice Session Guidelines:
-- Keep responses shorter for spoken delivery
-- Use a warm, conversational tone
-- Include pauses for reflection
-- Speak directly and compassionately
-- Normal conversation first: answer the user's direct request naturally
-- If user asks for story/joke/facts/general chat, respond normally and do not force therapy framing
-- Only introduce breathing exercises, grounding, coping steps, or assessment talk when user signals distress or asks for emotional support`
+    voice: `\nVoice style:
+  - Keep responses brief and easy to speak
+  - Use plain conversational language
+  - Only introduce coping techniques when user asks or shows distress`
     };
     
     return guidelines[sessionType] || guidelines.chat;

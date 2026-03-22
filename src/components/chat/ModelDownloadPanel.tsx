@@ -14,7 +14,8 @@ import {
   Zap,
   HardDrive
 } from "lucide-react";
-import { webllmService, type WebLLMModel } from "@/services/webllm-service";
+import aiService from "@/services/ai-service";
+import type { AIModel } from "@/services/providers/ai-provider";
 
 interface ModelDownloadPanelProps {
   isOpen: boolean;
@@ -30,24 +31,31 @@ export function ModelDownloadPanel({
 }: ModelDownloadPanelProps) {
   const [downloadingModel, setDownloadingModel] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<{ progress: number; text: string } | null>(null);
-  const [availableModels, setAvailableModels] = useState<WebLLMModel[]>([]);
+  const [availableModels, setAvailableModels] = useState<AIModel[]>([]);
   const [cachedModels, setCachedModels] = useState<string[]>([]);
+  const [cachedModelsWithTimestamps, setCachedModelsWithTimestamps] = useState<Array<{modelId: string, timestamp: number}>>([]);
   const [activeModel, setActiveModel] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   // Load models on mount
   useEffect(() => {
     const loadModels = async () => {
-      const models = webllmService.getAvailableModels();
+      const models = await aiService.getAvailableModels();
       setAvailableModels(models);
       
       try {
-        const cached = await webllmService.getCachedModelsAsync();
+        const cached = await aiService.getCachedModelsAsync();
         setCachedModels(cached);
+        
+        // Get models with timestamps for better sorting
+        const cachedWithTimestamps = await aiService.getCachedModelsWithTimestamps();
+        setCachedModelsWithTimestamps(cachedWithTimestamps);
       } catch {
-        setCachedModels(webllmService.getCachedModels());
+        const cached = aiService.getCachedModels();
+        setCachedModels(cached);
       }
       
-      setActiveModel(webllmService.getActiveModel());
+      setActiveModel(aiService.getActiveModel());
     };
     
     loadModels();
@@ -57,37 +65,71 @@ export function ModelDownloadPanel({
     return () => clearInterval(interval);
   }, []);
 
-  const handleModelDownload = async (model: WebLLMModel) => {
+  // Auto-load most recent model on first open (if no active model)
+  useEffect(() => {
+    if (isOpen && !activeModel && cachedModels.length > 0) {
+      const autoLoad = async () => {
+        try {
+          const success = await aiService.autoLoadMostRecentModel();
+          if (success) {
+            setActiveModel(aiService.getActiveModel());
+          }
+        } catch (error) {
+          console.error('Auto-load failed:', error);
+        }
+      };
+      autoLoad();
+    }
+  }, [isOpen, activeModel, cachedModels.length]);
+
+  const handleModelDownload = async (model: AIModel) => {
     if (downloadingModel) return;
 
     setDownloadingModel(model.id);
     setDownloadProgress({ progress: 0, text: 'Preparing download...' });
-
-    webllmService.setProgressCallback((progress) => {
-      setDownloadProgress(progress);
-    });
+    setRetryCount(0);
+    let shouldAutoClearProgress = true;
 
     try {
-      const success = await webllmService.loadModel(model.id);
+      const success = await aiService.loadModel(model.id, (progress) => {
+        setDownloadProgress(progress);
+      }, 3); // 3 retry attempts
+      
       if (success) {
         setCachedModels(prev => [...prev, model.id]);
+        const cachedWithTimestamps = await aiService.getCachedModelsWithTimestamps();
+        setCachedModelsWithTimestamps(cachedWithTimestamps);
         onModelSelect?.(model.id);
         setActiveModel(model.id);
+      } else {
+        shouldAutoClearProgress = false;
+        setDownloadProgress({
+          progress: 0,
+          text: 'Download failed. Please restart Tauri app and try again.'
+        });
+        setTimeout(() => setDownloadProgress(null), 5000);
       }
     } catch (error) {
       console.error('Download failed:', error);
+      shouldAutoClearProgress = false;
+      setDownloadProgress({ 
+        progress: 0, 
+        text: `Download failed: ${error instanceof Error ? error.message : 'Unknown error'}` 
+      });
+      setTimeout(() => setDownloadProgress(null), 5000);
     } finally {
       setDownloadingModel(null);
-      setDownloadProgress(null);
-      webllmService.clearProgressCallback();
+      if (shouldAutoClearProgress) {
+        setDownloadProgress(null);
+      }
     }
   };
 
   const handleModelSelect = async (modelId: string) => {
     try {
-      const success = await webllmService.loadModel(modelId);
+      const success = await aiService.loadModel(modelId);
       if (success) {
-        webllmService.setActiveModel(modelId);
+        aiService.setActiveModel(modelId);
         setActiveModel(modelId);
         onModelSelect?.(modelId);
       }
@@ -97,12 +139,33 @@ export function ModelDownloadPanel({
   };
 
   const handleClearCache = async () => {
-    if (confirm('Clear all downloaded models? This will free up storage space.')) {
-      webllmService.clearModelCache();
+    if (confirm('Clear all downloaded models? This will free up storage space and cannot be undone.')) {
+      aiService.clearModelCache();
       setCachedModels([]);
+      setCachedModelsWithTimestamps([]);
       setActiveModel(null);
     }
   };
+
+  // Sort available models by cache status and timestamp
+  const sortedModels = availableModels.slice().sort((a, b) => {
+    const aTimestamp = cachedModelsWithTimestamps.find(c => c.modelId === a.id)?.timestamp || 0;
+    const bTimestamp = cachedModelsWithTimestamps.find(c => c.modelId === b.id)?.timestamp || 0;
+    const aCached = cachedModels.includes(a.id);
+    const bCached = cachedModels.includes(b.id);
+    
+    // Active model first
+    if (activeModel === a.id) return -1;
+    if (activeModel === b.id) return 1;
+    
+    // Then cached models by most recent
+    if (aCached && bCached) return bTimestamp - aTimestamp;
+    if (aCached) return -1;
+    if (bCached) return 1;
+    
+    // Then by size (smaller first for uncached)
+    return a.sizeGB - b.sizeGB;
+  });
 
   return (
     <AnimatePresence>
@@ -190,15 +253,36 @@ export function ModelDownloadPanel({
 
               {/* Models List */}
               <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
-                  <Download className="h-4 w-4" />
-                  Available Models ({availableModels.length})
-                </h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+                    <Download className="h-4 w-4" />
+                    Available Models ({availableModels.length})
+                  </h3>
+                  {cachedModels.length > 0 && (
+                    <Badge className="bg-green-500/20 text-green-300 border-green-500/30 text-xs">
+                      {cachedModels.length} Downloaded
+                    </Badge>
+                  )}
+                </div>
 
-                {availableModels.map((model) => {
+                {sortedModels.map((model) => {
                   const isCached = cachedModels.includes(model.id);
                   const isDownloading = downloadingModel === model.id;
                   const isActive = activeModel === model.id;
+                  const timestampInfo = cachedModelsWithTimestamps.find(c => c.modelId === model.id);
+                  
+                  const formatTimestamp = (timestamp: number) => {
+                    const now = Date.now();
+                    const diff = now - timestamp;
+                    const minutes = Math.floor(diff / (1000 * 60));
+                    const hours = Math.floor(diff / (1000 * 60 * 60));
+                    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+                    
+                    if (minutes < 1) return 'Just now';
+                    if (minutes < 60) return `${minutes}m ago`;
+                    if (hours < 24) return `${hours}h ago`;
+                    return `${days}d ago`;
+                  };
 
                   return (
                     <motion.div
@@ -231,9 +315,15 @@ export function ModelDownloadPanel({
                             )}
                           </div>
                           
-                          <p className="text-xs text-gray-400 mb-3">
+                          <p className="text-xs text-gray-400 mb-2">
                             {model.description}
                           </p>
+                          
+                          {timestampInfo && (
+                            <p className="text-xs text-blue-400 mb-2 font-medium">
+                              Downloaded {formatTimestamp(timestampInfo.timestamp)}
+                            </p>
+                          )}
                           
                           <div className="flex items-center gap-4">
                             <div className="flex items-center gap-1">

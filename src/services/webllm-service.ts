@@ -299,9 +299,52 @@ class WebLLMService {
     if (!cachedModels.includes(modelId)) {
       cachedModels.push(modelId);
       localStorage.setItem('webllm-cached-models', JSON.stringify(cachedModels));
-      console.log('Model marked as cached. Updated list:', cachedModels);
+      
+      // Store download timestamp for recent model tracking
+      const timestamps = this.getModelTimestamps();
+      timestamps[modelId] = Date.now();
+      localStorage.setItem('webllm-model-timestamps', JSON.stringify(timestamps));
+      
+      console.log('Model marked as cached with timestamp. Updated list:', cachedModels);
       this.emit('cacheChange', cachedModels);
     }
+  }
+
+  private getModelTimestamps(): Record<string, number> {
+    try {
+      return JSON.parse(localStorage.getItem('webllm-model-timestamps') || '{}');
+    } catch {
+      return {};
+    }
+  }
+
+  getMostRecentModel(): string | null {
+    const cachedModels = this.getCachedModels();
+    if (cachedModels.length === 0) return null;
+    
+    const timestamps = this.getModelTimestamps();
+    let mostRecentModel = cachedModels[0];
+    let mostRecentTime = timestamps[mostRecentModel] || 0;
+    
+    for (const modelId of cachedModels) {
+      const timestamp = timestamps[modelId] || 0;
+      if (timestamp > mostRecentTime) {
+        mostRecentTime = timestamp;
+        mostRecentModel = modelId;
+      }
+    }
+    
+    return mostRecentModel;
+  }
+
+  getCachedModelsWithTimestamps(): Array<{modelId: string, timestamp: number}> {
+    const cachedModels = this.getCachedModels();
+    const timestamps = this.getModelTimestamps();
+    
+    return cachedModels.map(modelId => ({
+      modelId,
+      timestamp: timestamps[modelId] || 0
+    })).sort((a, b) => b.timestamp - a.timestamp); // Most recent first
   }
 
   // Add method to directly check IndexedDB for WebLLM models
@@ -405,17 +448,33 @@ class WebLLMService {
     if (isModelCached) {
       this.progressCallback?.({
         progress: progress.progress,
-        text: `Loading cached model: ${percentage}%`
+        text: `Loading cached model: ${percentage}%`,
+        loaded: progress.loaded,
+        total: progress.total
       });
     } else {
       const downloadInfo = this.calculateDownloadDetails(progress);
+      const speedText = downloadInfo.speed > 0 ? ` @ ${downloadInfo.speed}MB/s` : '';
+      const etaText = this.calculateETA(downloadInfo);
+      
       this.progressCallback?.({
         progress: progress.progress,
-        text: `Downloading: ${percentage}% (${downloadInfo.downloaded}MB / ${downloadInfo.total}MB)`,
+        text: `Downloading: ${percentage}% (${downloadInfo.downloaded}MB / ${downloadInfo.total}MB)${speedText}${etaText}`,
         loaded: progress.loaded,
         total: progress.total
       });
     }
+  }
+
+  private calculateETA(downloadInfo: {total: number, downloaded: number, speed: number}): string {
+    if (downloadInfo.speed <= 0 || downloadInfo.downloaded >= downloadInfo.total) return '';
+    
+    const remainingMB = downloadInfo.total - downloadInfo.downloaded;
+    const etaSeconds = Math.round(remainingMB / downloadInfo.speed);
+    
+    if (etaSeconds < 60) return ` • ${etaSeconds}s remaining`;
+    if (etaSeconds < 3600) return ` • ${Math.round(etaSeconds / 60)}m remaining`;
+    return ` • ${Math.round(etaSeconds / 3600)}h remaining`;
   }
 
   private calculateDownloadDetails(progress: any) {
@@ -436,7 +495,7 @@ class WebLLMService {
     };
   }
 
-  async loadModel(modelId: string): Promise<boolean> {
+  async loadModel(modelId: string, progressCallback?: (progress: WebLLMProgress) => void, maxRetries: number = 3): Promise<boolean> {
     if (this.isInitializing) return false;
     
     if (this.currentModel === modelId && this.engine) {
@@ -446,63 +505,97 @@ class WebLLMService {
     const model = this.models.find(m => m.id === modelId);
     if (!model) throw new Error(`Model ${modelId} not found`);
 
+    this.progressCallback = progressCallback || null;
     const isModelCached = this.isModelCached(modelId);
     
-    try {
-      this.isInitializing = true;
-      this.downloadStartTime = Date.now();
-      this.lastBytesLoaded = 0;
+    let lastError: Error | null = null;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        this.isInitializing = true;
+        this.downloadStartTime = Date.now();
+        this.lastBytesLoaded = 0;
 
-      await this.loadWebLLM();
+        await this.loadWebLLM();
 
-      this.progressCallback?.({
-        progress: 0,
-        text: isModelCached ? 'Loading cached model...' : 'Starting download...'
-      });
+        this.progressCallback?.({
+          progress: 0,
+          text: isModelCached ? 'Loading cached model...' : (attempt > 1 ? `Retrying download (${attempt}/${maxRetries})...` : 'Starting download...')
+        });
 
-      this.engine = new this.webllm.MLCEngine();
-      this.engine.setInitProgressCallback((progress: any) => {
-        this.handleProgress(progress, isModelCached);
-      });
+        this.engine = new this.webllm.MLCEngine();
+        this.engine.setInitProgressCallback((progress: any) => {
+          this.handleProgress(progress, isModelCached);
+        });
 
-      await this.engine.reload(modelId);
+        await this.engine.reload(modelId);
 
-      this.currentModel = modelId;
-      this.activeModel = modelId; // Set as active model
-      localStorage.setItem('webllm-active-model', modelId);
-      this.markModelAsCached(modelId);
-      
-      this.progressCallback?.({
-        progress: 1,
-        text: `${model.name} loaded successfully`
-      });
+        this.currentModel = modelId;
+        this.activeModel = modelId; // Set as active model
+        localStorage.setItem('webllm-active-model', modelId);
+        this.markModelAsCached(modelId);
+        
+        this.progressCallback?.({
+          progress: 1,
+          text: `${model.name} loaded successfully`
+        });
 
-      // Notify subscribers that model state changed
-      this.emit('modelChange', { modelId, loaded: true });
+        // Notify subscribers that model state changed
+        this.emit('modelChange', { modelId, loaded: true });
+        
+        console.log(`Model ${modelId} loaded successfully on attempt ${attempt}`);
+        return true;
 
-      toast({
-        title: "Model Loaded",
-        description: `${model.name} is ready for use`
-      });
-
-      return true;
-    } catch (error) {
-      console.error('Error loading model:', error);
-      this.progressCallback?.({
-        progress: 0,
-        text: `Error loading ${model.name}`
-      });
-
-      toast({
-        title: "Error Loading Model",
-        description: `Failed to load ${model.name}. Please try again.`,
-        variant: "destructive"
-      });
-
-      return false;
-    } finally {
-      this.isInitializing = false;
+      } catch (error) {
+        lastError = error as Error;
+        console.error(`Model loading attempt ${attempt} failed:`, error);
+        
+        if (attempt < maxRetries) {
+          this.progressCallback?.({
+            progress: 0,
+            text: `Attempt ${attempt} failed, retrying in 2 seconds...`
+          });
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      } finally {
+        this.isInitializing = false;
+      }
     }
+
+    // All retries failed
+    this.progressCallback?.({
+      progress: 0,
+      text: `Download failed after ${maxRetries} attempts: ${lastError?.message || 'Unknown error'}`
+    });
+    
+    throw lastError || new Error(`Failed to load model ${modelId} after ${maxRetries} attempts`);
+  }
+
+  async autoLoadMostRecentModel(): Promise<boolean> {
+    const mostRecentModel = this.getMostRecentModel();
+    if (!mostRecentModel) {
+      console.log('No cached models found for auto-loading');
+      return false;
+    }
+
+    const currentActive = this.getActiveModel();
+    if (currentActive === mostRecentModel) {
+      console.log('Most recent model is already active:', mostRecentModel);
+      return true;
+    }
+
+    try {
+      console.log('Auto-loading most recent model:', mostRecentModel);
+      const success = await this.loadModel(mostRecentModel);
+      if (success) {
+        console.log('Successfully auto-loaded:', mostRecentModel);
+        return true;
+      }
+    } catch (error) {
+      console.error('Failed to auto-load recent model:', error);
+    }
+    
+    return false;
   }
 
   async *generateResponse(
@@ -537,7 +630,11 @@ class WebLLMService {
       for await (const chunk of asyncChunkGenerator) {
         const content = chunk.choices[0]?.delta?.content || '';
         if (content) {
-          yield content;
+          // Split into small render units so UI updates look token-by-token.
+          const units = content.match(/\s+|[^\s]+/g) ?? [content];
+          for (const unit of units) {
+            yield unit;
+          }
         }
       }
     } catch (error) {
@@ -597,11 +694,48 @@ class WebLLMService {
   }
 
   clearModelCache(): void {
+    console.log('Clearing model cache...');
     localStorage.removeItem('webllm-cached-models');
-    this.currentModel = null;
+    localStorage.removeItem('webllm-model-timestamps');
+    localStorage.removeItem('webllm-active-model');
+    
+    // Reset internal state
     this.activeModel = null;
+    this.currentModel = null;
     this.engine = null;
-    console.log('All models cleared from cache');
+    
+    // Clear WebLLM's IndexedDB cache if possible
+    this.clearWebLLMIndexedDB().catch(console.error);
+    
+    // Notify subscribers
+    this.emit('cacheChange', []);
+    this.emit('modelChange', { modelId: null, loaded: false });
+    
+    console.log('Model cache cleared successfully');
+  }
+
+  private async clearWebLLMIndexedDB(): Promise<void> {
+    try {
+      const databases = await indexedDB.databases();
+      const webllmDbs = databases.filter(db => 
+        db.name?.includes('webllm') || 
+        db.name?.includes('mlc') || 
+        db.name?.includes('cache')
+      );
+      
+      for (const db of webllmDbs) {
+        if (db.name) {
+          console.log('Deleting WebLLM database:', db.name);
+          await new Promise<void>((resolve, reject) => {
+            const deleteReq = indexedDB.deleteDatabase(db.name!);
+            deleteReq.onerror = () => reject(deleteReq.error);
+            deleteReq.onsuccess = () => resolve();
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error clearing WebLLM IndexedDB:', error);
+    }
   }
 
   async checkWebGPUSupport(): Promise<boolean> {

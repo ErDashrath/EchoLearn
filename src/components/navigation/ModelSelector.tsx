@@ -11,19 +11,8 @@ import {
   Circle,
   Loader2 
 } from "lucide-react";
-import { webllmService } from "@/services/webllm-service";
-
-interface Model {
-  id: string;
-  name: string;
-  description: string;
-  type: "cloud" | "local";
-  size?: string;
-  speed: "fast" | "medium" | "slow";
-  quality: "high" | "medium" | "low";
-  isAvailable?: boolean;
-  isLoading?: boolean;
-}
+import aiService from "@/services/ai-service";
+import type { AIModel } from "@/services/providers/ai-provider";
 
 interface ModelSelectorProps {
   selectedModel?: string;
@@ -32,58 +21,18 @@ interface ModelSelectorProps {
   onOpenSidebar?: () => void; // Add callback to open sidebar
 }
 
-const AVAILABLE_MODELS: Model[] = [
-  {
-    id: "llama-3.2-3b",
-    name: "Llama 3.2 3B",
-    description: "Fast and efficient local model",
-    type: "local",
-    size: "1.8GB",
-    speed: "fast",
-    quality: "high",
-    isAvailable: true,
-  },
-  {
-    id: "llama-3.2-1b",
-    name: "Llama 3.2 1B",
-    description: "Ultra-lightweight local model",
-    type: "local",
-    size: "0.9GB",
-    speed: "fast",
-    quality: "medium",
-    isAvailable: true,
-  },
-  {
-    id: "phi-3-mini",
-    name: "Phi-3 Mini",
-    description: "Compact and efficient model",
-    type: "local",
-    size: "2.1GB",
-    speed: "medium",
-    quality: "high",
-    isAvailable: true,
-  },
-  {
-    id: "gemma-2b",
-    name: "Gemma 2B",
-    description: "Google's lightweight model",
-    type: "local",
-    size: "1.4GB",
-    speed: "fast",
-    quality: "medium",
-    isAvailable: true,
-  },
-  {
-    id: "qwen-1.5-0.5b",
-    name: "Qwen 1.5 0.5B",
-    description: "Very fast, minimal resource usage",
-    type: "local",
-    size: "0.4GB",
-    speed: "fast",
-    quality: "low",
-    isAvailable: true,
-  },
-];
+const getSpeed = (model: AIModel): "fast" | "medium" | "slow" => {
+  if (model.sizeGB <= 0.8) return "fast";
+  if (model.sizeGB <= 1.5) return "medium";
+  return "slow";
+};
+
+const getQuality = (model: AIModel): "high" | "medium" | "low" => {
+  const params = Number.parseFloat(model.parameters);
+  if (Number.isFinite(params) && params >= 3) return "high";
+  if (Number.isFinite(params) && params >= 1) return "medium";
+  return "low";
+};
 
 export function ModelSelector({ 
   selectedModel, 
@@ -92,6 +41,7 @@ export function ModelSelector({
   onOpenSidebar
 }: ModelSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [providerModels, setProviderModels] = useState<AIModel[]>([]);
   const [cachedModels, setCachedModels] = useState<string[]>([]);
   const [activeModel, setActiveModel] = useState<string | null>(null);
   
@@ -99,36 +49,27 @@ export function ModelSelector({
   useEffect(() => {
     const updateCachedModels = async () => {
       try {
-        // Use async method to get actual cached models
-        const cached = await webllmService.getCachedModelsAsync();
+        const models = await aiService.getAvailableModels();
+        setProviderModels(models);
+        const cached = await aiService.getCachedModelsAsync();
         console.log('ModelSelector: fetched cached models:', cached);
         setCachedModels(cached);
         
-        // Update active model
-        const current = webllmService.getActiveModel();
+        const current = aiService.getActiveModel();
         setActiveModel(current);
         console.log('ModelSelector: Active model is:', current);
       } catch (error) {
         console.error('Error fetching cached models:', error);
-        // Fallback to sync method
-        const cached = webllmService.getCachedModels();
+        aiService.getAvailableModels().then(setProviderModels).catch(() => undefined);
+        const cached = aiService.getCachedModels();
         setCachedModels(cached);
-        const current = webllmService.getActiveModel();
+        const current = aiService.getActiveModel();
         setActiveModel(current);
       }
     };
     
     // Initial load
     updateCachedModels();
-    
-    // TEST: Add a test model for debugging (remove this after testing)
-    if (process.env.NODE_ENV === 'development') {
-      setTimeout(() => {
-        console.log('Adding test model for debugging...');
-        webllmService.addTestModel();
-        updateCachedModels();
-      }, 1000);
-    }
     
     // Check for updates every 3 seconds
     const interval = setInterval(updateCachedModels, 3000);
@@ -137,7 +78,7 @@ export function ModelSelector({
   }, []);
   
   // Get only downloaded/cached models
-  const availableModels = AVAILABLE_MODELS.filter(model => cachedModels.includes(model.id));
+  const availableModels = providerModels.filter(model => cachedModels.includes(model.id));
   
   // Current model is the active model if it exists, otherwise first available
   const currentModel = activeModel 
@@ -153,9 +94,9 @@ export function ModelSelector({
     // Try to load the model immediately if it's cached
     if (cachedModels.includes(modelId)) {
       try {
-        const success = await webllmService.loadModel(modelId);
+        const success = await aiService.loadModel(modelId);
         if (success) {
-          webllmService.setActiveModel(modelId);
+          aiService.setActiveModel(modelId);
           setActiveModel(modelId);
           console.log(`Model ${modelId} loaded and activated`);
         }
@@ -286,16 +227,16 @@ export function ModelSelector({
                           
                           <div className="flex items-center space-x-3">
                             <div className="flex items-center space-x-1">
-                              <Zap className={`h-3 w-3 ${getSpeedColor(model.speed)}`} />
+                              <Zap className={`h-3 w-3 ${getSpeedColor(getSpeed(model))}`} />
                               <span className="text-xs text-gray-400 capitalize">
-                                {model.speed}
+                                {getSpeed(model)}
                               </span>
                             </div>
                             
                             <div className="flex items-center space-x-1">
-                              <Circle className={`h-3 w-3 ${getQualityColor(model.quality)}`} />
+                              <Circle className={`h-3 w-3 ${getQualityColor(getQuality(model))}`} />
                               <span className="text-xs text-gray-400 capitalize">
-                                {model.quality}
+                                {getQuality(model)}
                               </span>
                             </div>
                             

@@ -145,7 +145,7 @@ export default function ChatPage() {
                 Personalized
               </span>
             ) : (
-              <span className="text-sm text-gray-400 bg-gray-800 px-2 py-1 rounded">Your Therapist</span>
+              <span className="text-sm text-gray-400 bg-gray-800 px-2 py-1 rounded">MindScribe</span>
             )}
           </div>
         </div>

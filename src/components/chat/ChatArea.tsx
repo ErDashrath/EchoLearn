@@ -27,12 +27,11 @@ const WelcomeMessage = () => (
     <div className="flex-1">
       <div className="ai-bubble rounded-3xl rounded-tl-lg px-6 py-4 shadow-lg hover-lift">
         <p className="text-foreground leading-relaxed">
-          Hello! I'm your AI English tutor. I'm here to help you practice conversation, 
-          prepare for interviews, or work on specific language skills. How would you like to start today?
+          Hello! I'm MindScribe. We can chat normally, think through ideas, or talk through something that's bothering you. What's on your mind?
         </p>
       </div>
       <div className="flex items-center space-x-2 mt-3 px-2">
-        <span className="text-xs font-medium text-muted-foreground">Your Therapist</span>
+        <span className="text-xs font-medium text-muted-foreground">MindScribe</span>
         <span className="text-xs text-muted-foreground/60">•</span>
         <span className="text-xs text-muted-foreground/80">Just now</span>
       </div>

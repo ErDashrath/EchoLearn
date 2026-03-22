@@ -13,7 +13,7 @@ import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
 import { journalService, JournalEntry, JournalAnalysis } from '@/services/journal-service';
-import { webllmService } from '@/services/webllm-service';
+import { aiService } from '@/services/ai-service';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -366,7 +366,7 @@ const JournalEditor = memo<JournalEditorProps>(({
     }
   }, [entry?.id, onAnalyze]);
 
-  const llmReady = webllmService.isModelLoaded();
+  const llmReady = aiService.isModelLoaded();
 
   return (
     <motion.div

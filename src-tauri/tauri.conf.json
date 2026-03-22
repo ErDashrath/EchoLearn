@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "MINDSCRIBE",
-  "version": "0.1.0",
-  "identifier": "com.mindscribe.app",
+  "productName": "EchoLearn",
+  "version": "1.0.0",
+  "identifier": "com.echolearn.app",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
@@ -12,26 +12,54 @@
   "app": {
     "windows": [
       {
-        "title": "MINDSCRIBE V.0.1 BY BIG D AND TEAM",
-        "width": 800,
-        "height": 600,
+        "label": "main",
+        "title": "EchoLearn - AI Mental Health Companion",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 600,
         "resizable": true,
-        "fullscreen": false
+        "maximizable": true,
+        "minimizable": true,
+        "closable": true,
+        "center": true,
+        "fullscreen": false,
+        "alwaysOnTop": false,
+        "decorations": true,
+        "transparent": false,
+        "visible": true,
+        "skipTaskbar": false
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; connect-src 'self' https:; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data: blob:;"
     }
   },
   "bundle": {
     "active": true,
     "targets": "all",
+    "category": "Productivity",
+    "shortDescription": "AI-powered mental health companion",
+    "longDescription": "EchoLearn is an advanced AI mental health companion that provides personalized therapy, voice interaction, and comprehensive mental wellness tracking.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "copyright": "Copyright © 2026 EchoLearn Team. All rights reserved.",
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": "",
+      "tsp": false,
+      "wix": {
+        "language": "en-US"
+      },
+      "nsis": {
+        "displayLanguageSelector": true
+      }
+    }
   }
 }

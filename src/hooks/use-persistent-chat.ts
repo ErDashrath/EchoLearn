@@ -21,8 +21,12 @@ import {
   ChatSession,
   ChatMessage,
   MemoryContext,
+  detectIntent,
+  extractEntities,
+  EntityMemory,
 } from '@/services/chat-memory-service';
-import { webllmService, type WebLLMGenerationConfig } from '@/services/webllm-service';
+import { aiService } from '@/services/ai-service';
+import type { AIGenerationConfig } from '@/services/providers/ai-provider';
 import { mentalHealthPromptService, type DASS21Results } from '@/services/mental-health-prompt-service';
 import { ttsService } from '@/lib/tts-service';
 
@@ -73,6 +77,177 @@ export interface PersistentChatReturn {
   messagesEndRef: React.RefObject<HTMLDivElement>;
 }
 
+/**
+ * Format RAG results into a compact context block.
+ * Applies similarity threshold + deduplication against the recent window.
+ */
+const formatRetrievedHistory = (
+  memory: Awaited<ReturnType<typeof aiService.searchSimilar>>,
+  recentContentSet: ReadonlySet<string> = new Set(),
+): string => {
+  const sections: string[] = [];
+  let charCount = 0;
+  const MAX_RAG_CHARS = 400;
+  const MIN_SCORE = 0.55;
+
+  const isInRecentWindow = (content: string) => {
+    const key = content.slice(0, 50).toLowerCase();
+    return [...recentContentSet].some(r => r.includes(key) || key.includes(r));
+  };
+
+  if (memory.relevantMessages.length > 0) {
+    const lines: string[] = [];
+    for (const msg of memory.relevantMessages.slice(0, 3)) {
+      if (msg.similarity < MIN_SCORE) continue;
+      if (isInRecentWindow(msg.content)) continue;
+      const line = `\u2022 ${msg.content.replace(/\s+/g, ' ').slice(0, 110)}`;
+      if (charCount + line.length > MAX_RAG_CHARS) break;
+      lines.push(line);
+      charCount += line.length;
+    }
+    if (lines.length > 0) sections.push(`Past context:\n${lines.join('\n')}`);
+  }
+
+  if (memory.relevantJournals.length > 0 && charCount < MAX_RAG_CHARS) {
+    const lines: string[] = [];
+    for (const entry of memory.relevantJournals.slice(0, 1)) {
+      if (entry.similarity < MIN_SCORE) continue;
+      lines.push(`\u2022 ${entry.content.replace(/\s+/g, ' ').slice(0, 100)}`);
+    }
+    if (lines.length > 0) sections.push(`Journal note:\n${lines.join('\n')}`);
+  }
+
+  return sections.join('\n\n');
+};
+
+const CONTROL_TOKEN_PATTERN = /<\|[^|>]+\|>/g;
+const HEADER_ROLE_PATTERN = /(?:^|\n)\s*(system|user|assistant)\s*:?\s*$/gim;
+const SYSTEM_LEAK_PATTERN = /(You are MindScribe|Core Guidelines|Communication Style|User Context|Crisis Protocol|Current Levels|Chat Session Guidelines)/gi;
+const PARTIAL_CONTROL_PATTERN = /<\|$|^\|>|<\|[^|>]*$|^[^<]*\|>/;
+const METADATA_LEAK_PATTERN = /^(Context:|Mental context:|Chat style:|Journal style:|Voice style:)/i;
+const BRACKETED_ROLE_PATTERN = /\[\s*[a-z\s_-]*says?\s*\]:?\s*/gi;
+const SEPARATOR_PATTERN = /^\s*[-*_]{3,}\s*$/gm;
+const STREAM_FLUSH_INTERVAL_MS = 16;
+const STREAM_MAX_UNITS_PER_FLUSH = 1;
+
+const sanitizeModelOutput = (text: string): string => {
+  return text
+    .replace(CONTROL_TOKEN_PATTERN, '')
+    .replace(HEADER_ROLE_PATTERN, '')
+    .replace(BRACKETED_ROLE_PATTERN, '')
+    .replace(SEPARATOR_PATTERN, '')
+    .replace(SYSTEM_LEAK_PATTERN, '')
+    .replace(/\n{3,}/g, '\n\n');
+};
+
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const normalizeForComparison = (text: string): string => {
+  return text
+    .toLowerCase()
+    .replace(BRACKETED_ROLE_PATTERN, '')
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+const stripEchoedUserMessage = (text: string, userMessage: string): string => {
+  const trimmedUserMessage = userMessage.trim();
+  if (!trimmedUserMessage) return text;
+
+  let cleaned = text;
+  const exactUserPattern = new RegExp(escapeRegExp(trimmedUserMessage), 'gi');
+  cleaned = cleaned.replace(exactUserPattern, '');
+
+  const normalizedUser = normalizeForComparison(trimmedUserMessage);
+  if (normalizedUser.length < 24) {
+    return cleaned.replace(/\n{3,}/g, '\n\n').trim();
+  }
+
+  const blocks = cleaned.split(/\n{2,}/);
+  const filtered = blocks.filter((block) => {
+    const normalizedBlock = normalizeForComparison(block);
+    if (!normalizedBlock) return false;
+    if (normalizedBlock === normalizedUser) return false;
+    if (normalizedBlock.includes(normalizedUser)) return false;
+    return true;
+  });
+
+  return filtered.join('\n\n').replace(/\n{3,}/g, '\n\n').trim();
+};
+
+const dedupeRepeatedParagraphs = (text: string): string => {
+  const blocks = text
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+
+  const seen = new Set<string>();
+  const uniqueBlocks: string[] = [];
+
+  for (const block of blocks) {
+    const key = normalizeForComparison(block);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    uniqueBlocks.push(block);
+  }
+
+  return uniqueBlocks.join('\n\n');
+};
+
+const dedupeRepeatedSentences = (text: string): string => {
+  const sentences = text.match(/[^.!?]+[.!?]?/g);
+  if (!sentences) return text.trim();
+
+  const seen = new Set<string>();
+  const uniqueSentences: string[] = [];
+
+  for (const sentence of sentences) {
+    const trimmed = sentence.trim();
+    if (!trimmed) continue;
+
+    const key = normalizeForComparison(trimmed);
+    const isLikelyMeaningfulSentence = key.length >= 18;
+    if (isLikelyMeaningfulSentence && seen.has(key)) continue;
+
+    if (isLikelyMeaningfulSentence) {
+      seen.add(key);
+    }
+    uniqueSentences.push(trimmed);
+  }
+
+  return uniqueSentences
+    .join(' ')
+    .replace(/\s+([,.!?;:])/g, '$1')
+    .trim();
+};
+
+const cleanAssistantOutput = (text: string, userMessage: string): string => {
+  const cleaned = dedupeRepeatedSentences(
+    dedupeRepeatedParagraphs(
+      stripEchoedUserMessage(
+        sanitizeModelOutput(text),
+        userMessage,
+      ),
+    ),
+  );
+
+  return cleaned.replace(/\n{3,}/g, '\n\n').trim();
+};
+
+const splitStreamUnits = (text: string): string[] => {
+  if (!text) return [];
+  return Array.from(text);
+};
+
+const shouldDropChunk = (chunk: string): boolean => {
+  const c = chunk.trim();
+  if (!c) return false;
+  if (PARTIAL_CONTROL_PATTERN.test(c)) return true;
+  if (METADATA_LEAK_PATTERN.test(c)) return true;
+  return false;
+};
+
 // =============================================================================
 // HOOK
 // =============================================================================
@@ -110,12 +285,13 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
     // Initial check
     const updateSelectedModel = async () => {
       try {
-        const cachedModels = await webllmService.getCachedModelsAsync();
+        await aiService.autoLoadMostRecentModel();
+        const cachedModels = await aiService.getCachedModelsAsync();
         if (cachedModels.length > 0 && !selectedModel) {
           setSelectedModel(cachedModels[0]);
         }
       } catch (error) {
-        const cachedModels = webllmService.getCachedModels();
+        const cachedModels = aiService.getCachedModels();
         if (cachedModels.length > 0 && !selectedModel) {
           setSelectedModel(cachedModels[0]);
         }
@@ -125,12 +301,12 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
     updateSelectedModel();
 
     // Subscribe to model/cache changes — no more polling
-    const unsubModel = webllmService.on('modelChange', (data) => {
+    const unsubModel = aiService.on('modelChange', (data) => {
       if (data?.modelId) {
         setSelectedModel(data.modelId);
       }
     });
-    const unsubCache = webllmService.on('cacheChange', (cachedModels) => {
+    const unsubCache = aiService.on('cacheChange', (cachedModels) => {
       if (Array.isArray(cachedModels) && cachedModels.length > 0 && !selectedModel) {
         setSelectedModel(cachedModels[0]);
       }
@@ -285,16 +461,34 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
 
     // Add user message
     currentSession = await chatMemoryService.addMessage(currentSession, 'user', content);
+
+    // Layer 2: Update entity memory (regex extraction — zero cost)
+    currentSession.entityMemory = extractEntities(
+      currentSession.entityMemory ?? null,
+      currentSession.messages,
+    );
+    await chatMemoryService.saveSession(currentSession);
+
     setSession({ ...currentSession });
     setMemoryContext(chatMemoryService.getMemoryContext(currentSession));
     scrollToBottom();
 
+    // Layer 1: Detect intent + index user message to vector store
+    const intent = detectIntent(content);
+    if (aiService.supportsRAG()) {
+      try {
+        await aiService.storeMessage(user?.username || 'anonymous', currentSession.id, 'user', content, intent);
+      } catch (error) {
+        console.warn('Failed to index user message for retrieval:', error);
+      }
+    }
+
     // Check if model is ready
-    if (!selectedModel || !webllmService.isModelLoaded()) {
+    if (!selectedModel || !aiService.isModelLoaded()) {
       // Try to load if cached
-      if (selectedModel && webllmService.isModelCached(selectedModel)) {
+      if (selectedModel && aiService.isModelCached(selectedModel)) {
         try {
-          await webllmService.loadModel(selectedModel);
+          await aiService.loadModel(selectedModel);
         } catch (error) {
           toast({
             title: 'Model not ready',
@@ -318,17 +512,14 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
     abortControllerRef.current = new AbortController();
 
     try {
-      // Build conversation history
+      // Build conversation history from recent window
       const memory = chatMemoryService.getMemoryContext(currentSession);
       const conversationHistory: { role: string; content: string }[] = [];
-
-      // Add recent messages
       memory.recentMessages.forEach(msg => {
-        conversationHistory.push({
-          role: msg.role,
-          content: msg.content,
-        });
+        conversationHistory.push({ role: msg.role, content: msg.content });
       });
+
+      const supportMode = intent === 'distress' || intent === 'crisis';
 
       // Generate personalized system prompt
       const systemPrompt = mentalHealthPromptService.generateSystemPrompt({
@@ -336,22 +527,43 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
         dass21Results,
         sessionType: 'chat',
         timeOfDay: mentalHealthPromptService.getTimeOfDay(),
+        supportMode,
       });
 
-      const memorySystemAddition = memory.contextPrompt
-        ? `\n\n${memory.contextPrompt}`
-        : '';
+      // Layer 3: Semantic RAG — only when there's enough history to be meaningful,
+      // and only when the session has messages outside the recent window.
+      const { recentWindowSize } = chatMemoryService.getConfig();
+      const totalMsgs = currentSession.messages.filter(m => m.role !== 'system').length;
+      const hasEnoughHistory = aiService.supportsRAG() && totalMsgs > recentWindowSize + 4;
+
+      let ragFormatted = '';
+      if (hasEnoughHistory) {
+        try {
+          // Build dedup set from recent window content
+          const recentContentSet = new Set(
+            memory.recentMessages.map(m => m.content.slice(0, 50).toLowerCase()),
+          );
+          const retrieved = await aiService.searchSimilar(content, user?.username || 'anonymous', 3);
+          ragFormatted = formatRetrievedHistory(retrieved, recentContentSet);
+        } catch {
+          // RAG unavailable — fall through with no retrieval context
+        }
+      }
+
+      // Build compact, budget-aware context packet (entity + summary + RAG)
+      const contextPacket = chatMemoryService.buildContextPacket(currentSession, ragFormatted);
 
       // Check for crisis signals
       const hasCrisisSignals = mentalHealthPromptService.containsCrisisSignals(content);
+      const contextAddition = contextPacket ? `\n\n${contextPacket}` : '';
       const finalSystemPrompt = hasCrisisSignals
-        ? systemPrompt + memorySystemAddition + mentalHealthPromptService.getCrisisResponseAddition()
-        : systemPrompt + memorySystemAddition;
+        ? systemPrompt + contextAddition + mentalHealthPromptService.getCrisisResponseAddition()
+        : systemPrompt + contextAddition;
 
       // Config for generation
-      const config: WebLLMGenerationConfig = {
-        temperature: 0.7,
-        maxTokens: 512,
+      const config: AIGenerationConfig = {
+        temperature: hasCrisisSignals ? 0.65 : 0.6,
+        maxTokens: hasCrisisSignals ? 280 : 180,
         topP: 0.9,
       };
 
@@ -369,21 +581,93 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
 
       // Stream the response
       let responseContent = '';
-      for await (const chunk of webllmService.generateResponse(
-        conversationHistory,
-        config,
-        finalSystemPrompt
-      )) {
-        responseContent += chunk;
-        
-        // Update UI with streaming content
+      let pendingStreamUnits: string[] = [];
+      let streamFlushTimer: ReturnType<typeof setInterval> | null = null;
+      let backendStreamCompleted = false;
+      let resolveDrain: (() => void) | null = null;
+
+      const resolveDrainIfReady = () => {
+        if (!backendStreamCompleted || pendingStreamUnits.length > 0 || !resolveDrain) return;
+        resolveDrain();
+        resolveDrain = null;
+      };
+
+      const waitForStreamDrain = () => {
+        if (pendingStreamUnits.length === 0) {
+          return Promise.resolve();
+        }
+        return new Promise<void>((resolve) => {
+          resolveDrain = resolve;
+        });
+      };
+
+      const flushStreamBuffer = () => {
+        if (pendingStreamUnits.length === 0) {
+          resolveDrainIfReady();
+          return;
+        }
+
+        let flushedContent = '';
+        let flushedUnits = 0;
+
+        while (pendingStreamUnits.length > 0 && flushedUnits < STREAM_MAX_UNITS_PER_FLUSH) {
+          flushedContent += pendingStreamUnits.shift()!;
+          flushedUnits += 1;
+        }
+
+        if (!flushedContent && pendingStreamUnits.length > 0) {
+          flushedContent = pendingStreamUnits.shift()!;
+        }
+
+        responseContent += flushedContent;
+        responseContent = cleanAssistantOutput(responseContent, content);
+
         const updatedMessages = [...currentSession.messages, {
           ...aiMessagePlaceholder,
           content: responseContent,
         }];
         setSession(prev => prev ? { ...prev, messages: updatedMessages } : null);
         scrollToBottom();
+        resolveDrainIfReady();
+      };
+
+      const startStreamFlushLoop = () => {
+        if (streamFlushTimer) return;
+        streamFlushTimer = setInterval(flushStreamBuffer, STREAM_FLUSH_INTERVAL_MS);
+      };
+
+      const stopStreamFlushLoop = () => {
+        if (!streamFlushTimer) return;
+        clearInterval(streamFlushTimer);
+        streamFlushTimer = null;
+      };
+
+      startStreamFlushLoop();
+      try {
+        for await (const chunk of aiService.generateResponse(
+          conversationHistory,
+          config,
+          finalSystemPrompt,
+          currentSession.id,
+          true // Enable RAG retrieval from stored messages
+        )) {
+          if (shouldDropChunk(chunk)) continue;
+
+          const cleanedChunk = sanitizeModelOutput(chunk);
+          if (!cleanedChunk && chunk.trim().length > 0) continue;
+
+          pendingStreamUnits.push(...splitStreamUnits(cleanedChunk));
+        }
+        backendStreamCompleted = true;
+        await waitForStreamDrain();
+      } finally {
+        backendStreamCompleted = true;
+        flushStreamBuffer();
+        await waitForStreamDrain();
+        stopStreamFlushLoop();
       }
+
+      responseContent = cleanAssistantOutput(responseContent, content);
 
       // Save the final AI message
       currentSession = await chatMemoryService.addMessage(
@@ -391,6 +675,15 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
         'assistant',
         responseContent
       );
+
+      if (aiService.supportsRAG()) {
+        try {
+          await aiService.storeMessage(user?.username || 'anonymous', currentSession.id, 'assistant', responseContent, 'neutral');
+        } catch (error) {
+          console.warn('Failed to index assistant message for retrieval:', error);
+        }
+      }
+
       setSession({ ...currentSession });
       setMemoryContext(chatMemoryService.getMemoryContext(currentSession));
 
@@ -435,7 +728,7 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
   // ===========================================================================
 
   const generateSummary = useCallback(async (targetSession: ChatSession) => {
-    if (!webllmService.isModelLoaded()) {
+    if (!aiService.isModelLoaded()) {
       // Use quick local summary as fallback
       const quickSummary = chatMemoryService.createQuickSummary(targetSession);
       targetSession.summary = quickSummary;
@@ -455,16 +748,19 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
       }
 
       // Generate summary using LLM
-      const config: WebLLMGenerationConfig = {
+      const config: AIGenerationConfig = {
         temperature: 0.3, // Lower for more factual summary
         maxTokens: 300,
         topP: 0.9,
       };
 
       let summaryResponse = '';
-      for await (const chunk of webllmService.generateResponse(
+      for await (const chunk of aiService.generateResponse(
         [{ role: 'user', content: summaryPrompt }],
-        config
+        config,
+        undefined,
+        undefined,
+        false // No RAG for summary generation
       )) {
         summaryResponse += chunk;
       }
@@ -496,7 +792,7 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
   // ===========================================================================
 
   const stopGeneration = useCallback(() => {
-    webllmService.stopGeneration();
+    aiService.stopGeneration();
     abortControllerRef.current?.abort();
     setIsGenerating(false);
     toast({
@@ -506,7 +802,7 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
   }, [toast]);
 
   const selectModel = useCallback(async (modelId: string) => {
-    if (!webllmService.isModelCached(modelId)) {
+    if (!aiService.isModelCached(modelId)) {
       toast({
         title: 'Model not downloaded',
         description: 'Please download the model first',
@@ -516,7 +812,7 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
     }
 
     try {
-      const success = await webllmService.loadModel(modelId);
+      const success = await aiService.loadModel(modelId);
       if (success) {
         setSelectedModel(modelId);
         toast({

@@ -16,6 +16,133 @@
 import { storageService } from './storage-service';
 
 // =============================================================================
+// INTENT DETECTION  (Layer 1 — lightweight regex, zero LLM calls)
+// =============================================================================
+
+export type MessageIntent =
+  | 'crisis'
+  | 'distress'
+  | 'question'
+  | 'positive'
+  | 'goal'
+  | 'neutral';
+
+const CRISIS_PATTERN =
+  /\b(suicide|kill myself|end my life|not worth living|want to die|no reason to live|self.harm|hurt myself)\b/i;
+const DISTRESS_PATTERN =
+  /\b(anxious|anxiety|depressed|depression|overwhelmed|can'?t cope|hopeless|helpless|stressed|exhausted|numb|empty|panic|scared|terrified|crying|breakdown)\b/i;
+const POSITIVE_PATTERN =
+  /\b(better|improving|grateful|thankful|happy|hopeful|progress|achieved|accomplished|proud|calm|peaceful|feeling good)\b/i;
+const GOAL_PATTERN =
+  /\b(want to|trying to|working on|planning to|my goal|I aim|I hope to|I need to)\b/i;
+const QUESTION_PATTERN = /\?\s*$|\b(how do I|what should|why do|can you help|what is|how can)\b/i;
+
+/**
+ * Classify user message intent without any LLM call.
+ * Used to tag stored messages and adapt retrieval/response tone.
+ */
+export function detectIntent(content: string): MessageIntent {
+  if (CRISIS_PATTERN.test(content)) return 'crisis';
+  if (DISTRESS_PATTERN.test(content)) return 'distress';
+  if (QUESTION_PATTERN.test(content)) return 'question';
+  if (POSITIVE_PATTERN.test(content)) return 'positive';
+  if (GOAL_PATTERN.test(content)) return 'goal';
+  return 'neutral';
+}
+
+// =============================================================================
+// ENTITY / PINNED MEMORY  (Layer 2 — always-present user facts)
+// =============================================================================
+
+export interface EntityMemory {
+  /** User's first name if mentioned */
+  name: string | null;
+  /** Most recently stated goal */
+  currentGoal: string | null;
+  /** Most recently stated concern */
+  primaryConcern: string | null;
+  /** Mood derived from recent intent signals */
+  recentMood: 'positive' | 'distressed' | 'neutral';
+  lastUpdatedAt: string;
+}
+
+const NAME_PATTERNS = [
+  /\bmy name is ([A-Z][a-z]+)/i,
+  /\bcall me ([A-Z][a-z]+)/i,
+  /\bI am ([A-Z][a-z]{2,})\b/i,
+];
+const GOAL_EXTRACT =
+  /\b(?:my goal is|I want to|I'?m trying to|I'?m working on|I need to)\s+([^.!?\n]{5,60})/i;
+const CONCERN_EXTRACT =
+  /\b(?:worried about|struggling with|anxious about|stressed about|concerned about|dealing with)\s+([^.!?\n]{5,60})/i;
+
+/**
+ * Update entity memory from recent messages. Pure function — no side effects.
+ * Call on every new message; cost is negligible (regex only).
+ */
+export function extractEntities(
+  existing: EntityMemory | null,
+  messages: ChatMessage[],
+): EntityMemory {
+  const base: EntityMemory = existing ?? {
+    name: null,
+    currentGoal: null,
+    primaryConcern: null,
+    recentMood: 'neutral',
+    lastUpdatedAt: new Date().toISOString(),
+  };
+
+  const userMessages = messages.filter(m => m.role === 'user').slice(-10);
+  const combined = userMessages.map(m => m.content).join(' ');
+
+  // Name extraction — only once; don't overwrite once known
+  if (!base.name) {
+    for (const pat of NAME_PATTERNS) {
+      const m = combined.match(pat);
+      if (m && m[1].length <= 20) {
+        base.name = m[1];
+        break;
+      }
+    }
+  }
+
+  // Goal — always update to most recent
+  const goalMatch = combined.match(GOAL_EXTRACT);
+  if (goalMatch) base.currentGoal = goalMatch[1].trim().slice(0, 60);
+
+  // Concern — always update to most recent
+  const concernMatch = combined.match(CONCERN_EXTRACT);
+  if (concernMatch) base.primaryConcern = concernMatch[1].trim().slice(0, 60);
+
+  // Mood from last 3 intents
+  const recentIntents = userMessages.slice(-3).map(m => detectIntent(m.content));
+  if (recentIntents.includes('crisis') || recentIntents.includes('distress')) {
+    base.recentMood = 'distressed';
+  } else if (recentIntents.filter(i => i === 'positive').length >= 2) {
+    base.recentMood = 'positive';
+  } else {
+    base.recentMood = 'neutral';
+  }
+
+  base.lastUpdatedAt = new Date().toISOString();
+  return base;
+}
+
+/**
+ * Render entity memory as a compact 1-line string (~40 tokens).
+ * Returns empty string if no facts have been extracted yet.
+ */
+export function formatEntityMemory(entity: EntityMemory): string {
+  const parts: string[] = [];
+  if (entity.name) parts.push(`name: ${entity.name}`);
+  if (entity.currentGoal) parts.push(`goal: ${entity.currentGoal}`);
+  if (entity.primaryConcern) parts.push(`concern: ${entity.primaryConcern}`);
+  if (parts.length === 0) return '';
+  const moodNote = entity.recentMood !== 'neutral' ? `, mood: ${entity.recentMood}` : '';
+  return `[User — ${parts.join(', ')}${moodNote}]`;
+}
+
+// =============================================================================
 // TYPES
 // =============================================================================
 
@@ -47,6 +174,8 @@ export interface ChatSession {
   title: string;
   messages: ChatMessage[];
   summary: ConversationSummary | null;
+  /** Lightweight pinned user facts — always included in every prompt */
+  entityMemory?: EntityMemory;
   createdAt: string;
   updatedAt: string;
 }
@@ -74,31 +203,35 @@ export interface MemoryConfig {
 // =============================================================================
 
 const DEFAULT_CONFIG: MemoryConfig = {
-  recentWindowSize: 6,
+  recentWindowSize: 4,      // 4 turns ≈ 300 tokens — was 6; saves tokens for generation
   summarizeThreshold: 4,
-  maxSummaryLength: 500,
+  maxSummaryLength: 200,    // compact summaries for small LLMs — was 500
 };
+
+// =============================================================================
+// CONTEXT TOKEN BUDGET  (≈ 4 English chars per token)
+// Target: keep total memory overhead ≤ 600 tokens so small LLMs (2048 ctx)
+// have ≥ 1400 tokens available for the actual conversation + generation.
+// =============================================================================
+
+const CONTEXT_BUDGET = {
+  ENTITY_CHARS: 160,   // ~40  tokens — pinned user facts
+  SUMMARY_CHARS: 280,  // ~70  tokens — rolling session summary
+  RAG_CHARS: 480,      // ~120 tokens — semantic retrieval (conditional, deduped)
+} as const;
 
 // =============================================================================
 // SUMMARIZATION PROMPT
 // =============================================================================
 
-const SUMMARIZATION_PROMPT = `You are a conversation summarizer. Analyze the conversation and provide a concise summary.
-
-Output format (JSON):
+const SUMMARIZATION_PROMPT = `Summarize this mental health conversation in 1-2 short sentences and list up to 3 key topics.
+Output only valid JSON (no markdown):
 {
-  "summary": "Brief 2-3 sentence summary of the conversation",
-  "keyTopics": ["topic1", "topic2", "topic3"],
-  "emotionalThemes": ["emotion1", "emotion2"],
-  "userMentions": ["important thing user mentioned"]
+  "summary": "1-2 sentences under 50 words",
+  "keyTopics": ["topic1", "topic2"],
+  "emotionalThemes": [],
+  "userMentions": []
 }
-
-Rules:
-- Keep summary under 100 words
-- Extract 3-5 key topics maximum
-- Note emotional themes (anxiety, hope, frustration, progress, etc.)
-- Capture important user mentions (goals, concerns, achievements)
-- Focus on information relevant for ongoing support
 
 Conversation to summarize:
 `;
@@ -242,88 +375,109 @@ class ChatMemoryService {
   // ===========================================================================
 
   /**
-   * Get memory context for LLM prompt
-   * Returns recent messages + summary of older ones
+   * Get memory context for LLM prompt.
+   * Assembles: entity memory + rolling summary/fallback, within token budget.
    */
   getMemoryContext(session: ChatSession): MemoryContext {
     const { recentWindowSize } = this.config;
     const allMessages = session.messages.filter(m => m.role !== 'system');
-    
-    // Split into recent and older messages
+
     const recentMessages = allMessages.slice(-recentWindowSize);
     const olderMessages = allMessages.slice(0, -recentWindowSize);
 
-    // Build context prompt
-    let contextPrompt = '';
+    const contextParts: string[] = [];
 
+    // Layer 1: Pinned entity memory (~40 tokens — always present if available)
+    if (session.entityMemory) {
+      const entityStr = formatEntityMemory(session.entityMemory);
+      if (entityStr) contextParts.push(entityStr.slice(0, CONTEXT_BUDGET.ENTITY_CHARS));
+    }
+
+    // Layer 2: Rolling summary or fallback hints
     if (olderMessages.length > 0) {
       if (session.summary) {
-        contextPrompt += this.formatSummaryForPrompt(session.summary);
+        contextParts.push(
+          this.formatCompactSummary(session.summary).slice(0, CONTEXT_BUDGET.SUMMARY_CHARS),
+        );
       } else {
-        contextPrompt += this.formatFallbackContextForPrompt(olderMessages);
+        const fallback = this.buildFallbackHints(olderMessages);
+        if (fallback) contextParts.push(fallback);
       }
     }
 
     return {
       recentMessages,
       summary: session.summary,
-      contextPrompt,
+      contextPrompt: contextParts.join('\n'),
     };
   }
 
   /**
-   * Format summary for inclusion in LLM prompt
+   * Build a complete, token-budget-aware context packet for the system prompt.
+   * Includes entity memory + summary + optional RAG block in priority order.
+   *
+   * @param session     Current chat session
+   * @param ragContext  Pre-formatted RAG string (already deduped & capped)
+   */
+  buildContextPacket(session: ChatSession, ragContext?: string): string {
+    const parts: string[] = [];
+
+    // Layer 1: Entity memory
+    if (session.entityMemory) {
+      const entityStr = formatEntityMemory(session.entityMemory);
+      if (entityStr) parts.push(entityStr.slice(0, CONTEXT_BUDGET.ENTITY_CHARS));
+    }
+
+    // Layer 2: Summary or fallback
+    const { recentWindowSize } = this.config;
+    const allMessages = session.messages.filter(m => m.role !== 'system');
+    const olderMessages = allMessages.slice(0, -recentWindowSize);
+
+    if (olderMessages.length > 0) {
+      if (session.summary) {
+        parts.push(
+          this.formatCompactSummary(session.summary).slice(0, CONTEXT_BUDGET.SUMMARY_CHARS),
+        );
+      } else {
+        const fallback = this.buildFallbackHints(olderMessages);
+        if (fallback) parts.push(fallback);
+      }
+    }
+
+    // Layer 3: Semantic RAG context (conditional — caller handles dedup & scoring)
+    if (ragContext && ragContext.trim()) {
+      parts.push(ragContext.slice(0, CONTEXT_BUDGET.RAG_CHARS));
+    }
+
+    return parts.join('\n');
+  }
+
+  /** Compact 1-line summary for injection into system prompt */
+  private formatCompactSummary(summary: ConversationSummary): string {
+    let text = `[Prior context: ${summary.summary}`;
+    if (summary.keyTopics.length > 0) {
+      text += ` Topics: ${summary.keyTopics.slice(0, 3).join(', ')}.`;
+    }
+    text += ']';
+    return text;
+  }
+
+  /**
+   * Lightweight continuity hints from older messages before first summary.
+   * Extracts at most 2 recent user snippets (~80 chars each).
+   */
+  private buildFallbackHints(olderMessages: ChatMessage[]): string {
+    const userMsgs = olderMessages.filter(m => m.role === 'user').slice(-2);
+    if (userMsgs.length === 0) return '';
+    const hints = userMsgs.map(m => m.content.replace(/\s+/g, ' ').slice(0, 80)).join('; ');
+    return `[Earlier: ${hints}]`;
+  }
+
+  /**
+   * @deprecated Use buildContextPacket() instead. Kept for backward compat.
    */
   private formatSummaryForPrompt(summary: ConversationSummary): string {
-    let prompt = '\n## Previous Conversation Context:\n';
-    prompt += `${summary.summary}\n`;
-
-    if (summary.keyTopics.length > 0) {
-      prompt += `\nKey topics discussed: ${summary.keyTopics.join(', ')}\n`;
-    }
-
-    if (summary.emotionalThemes.length > 0) {
-      prompt += `Emotional themes: ${summary.emotionalThemes.join(', ')}\n`;
-    }
-
-    if (summary.userMentions.length > 0) {
-      prompt += `Important mentions: ${summary.userMentions.join('; ')}\n`;
-    }
-
-    prompt += '\n---\n';
-    return prompt;
-  }
-
-  /**
-   * Provide lightweight continuity before first summary is generated.
-   * Helps preserve facts (for example names) when the chat grows past
-   * the recent window.
-   */
-  private formatFallbackContextForPrompt(olderMessages: ChatMessage[]): string {
-    const fallbackWindow = 4;
-    const maxCharsPerMessage = 180;
-    const snippets = olderMessages.slice(-fallbackWindow);
-
-    let prompt = '\n## Earlier Conversation Notes (pre-summary):\n';
-    prompt += 'Keep continuity with these prior points:\n';
-
-    snippets.forEach((msg, index) => {
-      const role = msg.role === 'user' ? 'User' : 'Assistant';
-      const compactContent = this.compactMessageForPrompt(msg.content, maxCharsPerMessage);
-      prompt += `${index + 1}. ${role}: ${compactContent}\n`;
-    });
-
-    prompt += '\n---\n';
-    return prompt;
-  }
-
-  /**
-   * Keep fallback context small while preserving key user details.
-   */
-  private compactMessageForPrompt(content: string, maxChars: number): string {
-    const normalized = content.replace(/\s+/g, ' ').trim();
-    if (normalized.length <= maxChars) return normalized;
-    return `${normalized.slice(0, maxChars)}...`;
+    return this.formatCompactSummary(summary) + '\n';
   }
 
   /**

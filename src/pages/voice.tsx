@@ -14,7 +14,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useVoice } from '@/hooks/use-voice';
-import { webllmService } from '@/services/webllm-service';
+import { aiService } from '@/services/ai-service';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocation } from 'wouter';
 import { mentalHealthPromptService } from '@/services/mental-health-prompt-service';
@@ -48,6 +48,9 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { PiperVoice } from '@/services/voice-service-web';
+
+const VOICE_CONTEXT_TURNS = 4;
+const VOICE_SILENCE_MS = 900;
 
 // =============================================================================
 // AUDIO VISUALIZER COMPONENT
@@ -217,10 +220,10 @@ const VoiceTherapyPage: React.FC = () => {
 
   // Check WebLLM state
   useEffect(() => {
-    setLlmLoaded(webllmService.isModelLoaded());
+    setLlmLoaded(aiService.isModelLoaded());
 
     // Subscribe to model changes instead of polling
-    const unsub = webllmService.on('modelChange', (data) => {
+    const unsub = aiService.on('modelChange', (data) => {
       setLlmLoaded(!!data?.loaded);
     });
     return () => unsub();
@@ -285,6 +288,17 @@ const VoiceTherapyPage: React.FC = () => {
     return output;
   };
 
+  const getVoiceContextMessages = useCallback((userText: string) => {
+    const recentTurns = conversation.slice(-VOICE_CONTEXT_TURNS).flatMap((entry) => {
+      if (entry.role === 'user') {
+        return [{ role: 'user' as const, content: entry.text }];
+      }
+      return [{ role: 'assistant' as const, content: entry.text }];
+    });
+
+    return [...recentTurns, { role: 'user' as const, content: userText }];
+  }, [conversation]);
+
   // Process user speech and get AI response
   const processUserSpeech = useCallback(async (userText: string) => {
     if (!userText.trim()) return;
@@ -323,14 +337,14 @@ const VoiceTherapyPage: React.FC = () => {
         - Avoid assumptions about the user's emotional state.`;
       }
 
-      // Generate AI response using webllmService async generator
+      // Generate AI response using aiService async generator
       let aiResponse = quickReply || '';
       if (!quickReply) {
-        const generator = webllmService.generateResponse(
-          [{ role: 'user', content: userText }],
+        const generator = aiService.generateResponse(
+          getVoiceContextMessages(userText),
           distressMode
-            ? { maxTokens: 80, temperature: 0.55, topP: 0.9 }
-            : { maxTokens: 56, temperature: 0.7, topP: 0.92 },
+            ? { maxTokens: 64, temperature: 0.45, topP: 0.88 }
+            : { maxTokens: 40, temperature: 0.55, topP: 0.85 },
           systemPrompt
         );
 
@@ -374,7 +388,7 @@ const VoiceTherapyPage: React.FC = () => {
         setIsProcessing(false);
       }
     }
-  }, [speak, speed, dass21Results, continuousMode, isSpeaking, startListening]);
+  }, [speak, speed, dass21Results, continuousMode, isSpeaking, startListening, getVoiceContextMessages]);
 
   // Handle push-to-talk
   const handlePushToTalk = async () => {
@@ -412,7 +426,7 @@ const VoiceTherapyPage: React.FC = () => {
       clearTimeout(silenceSubmitTimeoutRef.current);
       silenceSubmitTimeoutRef.current = null;
     }
-    await webllmService.stopGeneration();
+    await aiService.stopGeneration();
     await stopListening();
     stopSpeaking();
     setIsProcessing(false);
@@ -443,7 +457,7 @@ const VoiceTherapyPage: React.FC = () => {
       } else {
         startListening();
       }
-    }, 1500);
+    }, VOICE_SILENCE_MS);
 
     return () => {
       if (silenceSubmitTimeoutRef.current) {
@@ -462,7 +476,7 @@ const VoiceTherapyPage: React.FC = () => {
       if (silenceSubmitTimeoutRef.current) {
         clearTimeout(silenceSubmitTimeoutRef.current);
       }
-      webllmService.stopGeneration();
+      aiService.stopGeneration();
       stopSpeaking();
     };
   }, [stopSpeaking]);

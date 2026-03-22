@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,7 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { X, FileText, FileCode, Database, Download, Check, Loader2 } from "lucide-react";
 import { TTSToggle } from "@/components/TTSToggle";
-import { webllmService, type WebLLMModel } from "@/services/webllm-service";
+import aiService from "@/services/ai-service";
+import type { AIModel } from "@/services/providers/ai-provider";
 import type { ChatMode, FocusMode } from "@/types/schema";
 
 interface SettingsPanelProps {
@@ -72,34 +73,38 @@ export function SettingsPanel({
   const [selectedLevel, setSelectedLevel] = useState("intermediate");
   const [downloadingModel, setDownloadingModel] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<{ progress: number; text: string } | null>(null);
+  const [availableModels, setAvailableModels] = useState<AIModel[]>([]);
+  const [cachedModels, setCachedModels] = useState<string[]>([]);
 
-  const availableModels = webllmService.getAvailableModels();
-  const cachedModels = webllmService.getCachedModels();
+  // Load models asynchronously
+  useEffect(() => {
+    aiService.getAvailableModels().then(setAvailableModels);
+    aiService.getCachedModelsAsync().then(setCachedModels).catch(() => {
+      setCachedModels(aiService.getCachedModels());
+    });
+  }, []);
 
-  const handleModelDownload = async (model: WebLLMModel) => {
+  const handleModelDownload = async (model: AIModel) => {
     if (downloadingModel) return;
 
     setDownloadingModel(model.id);
     setDownloadProgress({ progress: 0, text: 'Preparing...' });
 
-    webllmService.setProgressCallback((progress) => {
-      setDownloadProgress(progress);
-    });
-
     try {
-      const success = await webllmService.loadModel(model.id);
+      const success = await aiService.loadModel(model.id, (progress) => {
+        setDownloadProgress(progress);
+      });
       if (success && onModelSelect) {
         onModelSelect(model.id);
       }
     } finally {
       setDownloadingModel(null);
       setDownloadProgress(null);
-      webllmService.clearProgressCallback();
     }
   };
 
   const handleModelSelect = (modelId: string) => {
-    if (webllmService.isModelCached(modelId)) {
+    if (aiService.isModelCached(modelId)) {
       onModelSelect?.(modelId);
     }
   };
@@ -321,7 +326,7 @@ export function SettingsPanel({
                           size="sm"
                           onClick={() => {
                             if (confirm('Clear all downloaded models? This will free up storage space.')) {
-                              webllmService.clearModelCache();
+                              aiService.clearModelCache();
                               onClose();
                               setTimeout(() => window.location.reload(), 100);
                             }
