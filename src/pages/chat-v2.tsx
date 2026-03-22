@@ -30,13 +30,16 @@ import {
   Brain,
   Sparkles,
   Plus,
+  Gauge,
 } from "lucide-react";
 import type { DASS21Results } from "@/services/mental-health-prompt-service";
+import { vectorMemoryService, type VectorMemoryMode } from "@/services/vector-memory-service";
 import type { Message } from "@/types/schema";
 
 export default function ChatPage() {
   const [showHistory, setShowHistory] = useState(false);
   const [dass21Results, setDass21Results] = useState<DASS21Results | null>(null);
+  const [memoryMode, setMemoryMode] = useState<VectorMemoryMode>(vectorMemoryService.getMode());
   const { theme, toggleTheme } = useTheme();
   const { user, getDASS21Results, hasCompletedDASS21 } = useAuth();
 
@@ -96,6 +99,12 @@ export default function ChatPage() {
     else if (hour >= 17 && hour < 21) greeting = 'Good evening';
 
     return name ? `${greeting}, ${name}` : greeting;
+  };
+
+  const toggleMemoryMode = () => {
+    const nextMode: VectorMemoryMode = memoryMode === 'performance' ? 'quality' : 'performance';
+    vectorMemoryService.setMode(nextMode);
+    setMemoryMode(nextMode);
   };
 
   return (
@@ -159,6 +168,25 @@ export default function ChatPage() {
               {isSummarizing && <span className="animate-pulse">•</span>}
             </div>
           )}
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={toggleMemoryMode}
+            className={`hidden md:flex items-center gap-1.5 border-gray-700 text-xs ${
+              memoryMode === 'performance'
+                ? 'bg-emerald-900/20 text-emerald-300 hover:bg-emerald-900/30'
+                : 'bg-blue-900/20 text-blue-300 hover:bg-blue-900/30'
+            }`}
+            title={
+              memoryMode === 'performance'
+                ? 'Performance mode: lower RAM usage, faster retrieval.'
+                : 'Quality mode: richer semantic embeddings, higher RAM usage.'
+            }
+          >
+            <Gauge className="h-3.5 w-3.5" />
+            {memoryMode === 'performance' ? 'Memory: Performance' : 'Memory: Quality'}
+          </Button>
 
           {/* Model Selector */}
           <ModelSelector

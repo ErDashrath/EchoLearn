@@ -22,6 +22,7 @@ import {
   ChatMessage,
   MemoryContext,
 } from '@/services/chat-memory-service';
+import { deviceMemoryService } from '@/services/device-memory-service';
 import { webllmService, type WebLLMGenerationConfig } from '@/services/webllm-service';
 import { mentalHealthPromptService, type DASS21Results } from '@/services/mental-health-prompt-service';
 import { ttsService } from '@/lib/tts-service';
@@ -222,6 +223,9 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
   const deleteSession = useCallback(async (sessionId: string) => {
     try {
       await chatMemoryService.deleteSession(sessionId);
+      if (user?.username) {
+        await deviceMemoryService.deleteChatSessionMemories(user.username, sessionId);
+      }
       setSessions(prev => prev.filter(s => s.id !== sessionId));
 
       if (session?.id === sessionId) {
@@ -241,7 +245,7 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
         variant: 'destructive',
       });
     }
-  }, [session?.id, toast]);
+  }, [session?.id, toast, user?.username]);
 
   // ===========================================================================
   // MESSAGE HANDLING
@@ -275,6 +279,51 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
     setSession({ ...currentSession });
     setMemoryContext(chatMemoryService.getMemoryContext(currentSession));
     scrollToBottom();
+
+    if (user?.username) {
+      const latestUserMessage = currentSession.messages[currentSession.messages.length - 1];
+      await deviceMemoryService.upsertChatMessage(user.username, currentSession, latestUserMessage);
+    }
+
+    const directMemoryAnswer = user?.username
+      ? await deviceMemoryService.answerFactQuestion(user.username, content)
+      : null;
+
+    if (directMemoryAnswer) {
+      currentSession = await chatMemoryService.addMessage(
+        currentSession,
+        'assistant',
+        directMemoryAnswer
+      );
+      setSession({ ...currentSession });
+      setMemoryContext(chatMemoryService.getMemoryContext(currentSession));
+
+      if (user?.username) {
+        const latestAssistantMessage = currentSession.messages[currentSession.messages.length - 1];
+        await deviceMemoryService.upsertChatMessage(
+          user.username,
+          currentSession,
+          latestAssistantMessage
+        );
+      }
+
+      setSessions(prev => {
+        const index = prev.findIndex(s => s.id === currentSession!.id);
+        if (index >= 0) {
+          const updated = [...prev];
+          updated[index] = currentSession!;
+          return updated;
+        }
+        return [currentSession!, ...prev];
+      });
+
+      if (ttsEnabled) {
+        setTimeout(() => ttsService.speak(directMemoryAnswer), 300);
+      }
+
+      scrollToBottom();
+      return;
+    }
 
     // Check if model is ready
     if (!selectedModel || !webllmService.isModelLoaded()) {
@@ -328,12 +377,35 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
       const memorySystemAddition = memory.contextPrompt
         ? `\n\n${memory.contextPrompt}`
         : '';
+      const retrievedContext = user?.username
+        ? await deviceMemoryService.buildContextForTurn({
+            userId: user.username,
+            query: content,
+            sessionId: currentSession.id,
+            recentMessages: memory.recentMessages,
+            limit: 10,
+          })
+        : { prompt: '', items: [] };
+      const retrievedMemoryAddition = retrievedContext.prompt
+        ? `\n\n${retrievedContext.prompt}`
+        : '';
+      const conversationalContinuityAddition = `
+
+## Conversational style
+- Talk like a warm, supportive friend.
+- Keep the flow natural and continuous across messages.
+- Reference relevant past details naturally when helpful.
+- Avoid robotic CBT-style templates unless the user explicitly asks for structured exercises.`;
 
       // Check for crisis signals
       const hasCrisisSignals = mentalHealthPromptService.containsCrisisSignals(content);
       const finalSystemPrompt = hasCrisisSignals
-        ? systemPrompt + memorySystemAddition + mentalHealthPromptService.getCrisisResponseAddition()
-        : systemPrompt + memorySystemAddition;
+        ? systemPrompt
+            + memorySystemAddition
+            + retrievedMemoryAddition
+            + conversationalContinuityAddition
+            + mentalHealthPromptService.getCrisisResponseAddition()
+        : systemPrompt + memorySystemAddition + retrievedMemoryAddition + conversationalContinuityAddition;
 
       // Config for generation
       const config: WebLLMGenerationConfig = {
@@ -381,6 +453,15 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
       setSession({ ...currentSession });
       setMemoryContext(chatMemoryService.getMemoryContext(currentSession));
 
+      if (user?.username) {
+        const latestAssistantMessage = currentSession.messages[currentSession.messages.length - 1];
+        await deviceMemoryService.upsertChatMessage(
+          user.username,
+          currentSession,
+          latestAssistantMessage
+        );
+      }
+
       // Update sessions list
       setSessions(prev => {
         const index = prev.findIndex(s => s.id === currentSession!.id);
@@ -427,6 +508,13 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
       const quickSummary = chatMemoryService.createQuickSummary(targetSession);
       targetSession.summary = quickSummary;
       await chatMemoryService.saveSession(targetSession);
+      if (user?.username) {
+        await deviceMemoryService.upsertConversationSummary(
+          user.username,
+          targetSession,
+          quickSummary
+        );
+      }
       setSession({ ...targetSession });
       setMemoryContext(chatMemoryService.getMemoryContext(targetSession));
       return;
@@ -461,6 +549,13 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
         targetSession,
         summaryResponse
       );
+      if (user?.username && updatedSession.summary) {
+        await deviceMemoryService.upsertConversationSummary(
+          user.username,
+          updatedSession,
+          updatedSession.summary
+        );
+      }
       setSession({ ...updatedSession });
       setMemoryContext(chatMemoryService.getMemoryContext(updatedSession));
 
@@ -472,11 +567,18 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
       const quickSummary = chatMemoryService.createQuickSummary(targetSession);
       targetSession.summary = quickSummary;
       await chatMemoryService.saveSession(targetSession);
+      if (user?.username) {
+        await deviceMemoryService.upsertConversationSummary(
+          user.username,
+          targetSession,
+          quickSummary
+        );
+      }
       setSession({ ...targetSession });
     } finally {
       setIsSummarizing(false);
     }
-  }, []);
+  }, [user?.username]);
 
   // ===========================================================================
   // CONTROL ACTIONS

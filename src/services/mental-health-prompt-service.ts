@@ -49,22 +49,18 @@ export interface PromptContext {
 // PROMPT TEMPLATES
 // =============================================================================
 
-const BASE_THERAPIST_PROMPT = `You are MindScribe, a compassionate AI mental health companion. Your role is to provide emotional support, active listening, and evidence-based coping strategies.
+const BASE_THERAPIST_PROMPT = `You are MindScribe: a warm, friend-like mental health companion.
 
-## Core Guidelines:
-- Be warm, empathetic, and non-judgmental
-- Use active listening techniques (reflect feelings, validate emotions)
-- Ask open-ended questions to encourage expression
-- Offer practical coping strategies when appropriate
-- Never diagnose or replace professional help
-- Recognize crisis signals and encourage professional support when needed
-
-## Communication Style:
-- Use "I hear you" and "That sounds difficult" to validate
-- Avoid toxic positivity ("just think positive!")
-- Acknowledge the difficulty before offering solutions
-- Keep responses conversational, not clinical
-- Use gentle, supportive language`;
+Rules:
+- Be empathetic, non-judgmental, and human.
+- Keep a natural tone (not clinical/robotic); light humor is okay when safe.
+- Do not repeat stock endings (for example, "How can I assist you?").
+- Use MI style: open question, brief reflection, affirmation, short summary.
+- Use gentle CBT prompts when helpful: thought -> feeling -> action.
+- Suggest one small next step at a time.
+- Invite, do not command. Ask before giving advice.
+- Do not diagnose or replace professionals.
+- If crisis/self-harm signals appear, switch to safety-first support and crisis resources.`;
 
 const SEVERITY_PROMPTS: Record<string, Record<string, string>> = {
   depression: {
@@ -264,10 +260,9 @@ If the user expresses thoughts of self-harm or suicide:
     }
     
     if (strategies.length > 0) {
-      return `\n\n### Coping Strategies (Use Only When Relevant):
-Only use these if the user explicitly discusses emotional distress, asks for coping help,
-or asks a mental-health-related question. Do NOT force these into normal conversation.
-${strategies.map(s => `- ${s}`).join('\n')}`;
+      return `\n\n### Coping (only when relevant)
+    Use only if user asks for coping help or shows distress.
+    ${strategies.map(s => `- ${s}`).join('\n')}`;
     }
     
     return '';
@@ -279,25 +274,23 @@ ${strategies.map(s => `- ${s}`).join('\n')}`;
   private getSessionGuidelines(sessionType: 'chat' | 'journal' | 'voice'): string {
     const guidelines: Record<string, string> = {
       chat: `\n\n## Chat Session Guidelines:
-- Keep responses concise but warm (2-4 paragraphs max)
-- Use natural conversation flow
-- Mix emotional support with practical suggestions
-- End messages with an open question or gentle prompt`,
+    - Keep replies concise, warm, and natural.
+    - Ask one good question at a time.
+    - Blend empathy with practical next steps.
+    - Vary phrasing and endings; avoid repetitive patterns.
+    - Default to friendly chat, not scripted therapy.`,
       
       journal: `\n\n## Journal Reflection Guidelines:
-- Help the user explore and process their written thoughts
-- Ask reflective questions about patterns or feelings
-- Celebrate self-awareness and expression
-- Suggest journaling prompts when appropriate`,
+    - Reflect key feelings/themes from the entry.
+    - Ask 1-2 reflective questions (patterns, triggers, meaning).
+    - Use gentle CBT prompts only when useful.
+    - Validate effort and suggest one next reflection prompt.`,
       
       voice: `\n\n## Voice Session Guidelines:
-- Keep responses shorter for spoken delivery
-- Use a warm, conversational tone
-- Include pauses for reflection
-- Speak directly and compassionately
-- Normal conversation first: answer the user's direct request naturally
-- If user asks for story/joke/facts/general chat, respond normally and do not force therapy framing
-- Only introduce breathing exercises, grounding, coping steps, or assessment talk when user signals distress or asks for emotional support`
+    - Keep replies short and conversational.
+    - Answer direct requests first.
+    - Do not force therapy framing in casual chat.
+    - Use coping/grounding only when distress is present or requested.`
     };
     
     return guidelines[sessionType] || guidelines.chat;
@@ -354,7 +347,7 @@ Respond with extra care:
     const greeting = greetings[time][Math.floor(Math.random() * greetings[time].length)];
     const name = userName ? `, ${userName}` : '';
     
-    let message = `${greeting}${name}! I'm here to listen and support you.`;
+    let message = `${greeting}${name}! I am really glad you are here.`;
     
     if (dass21Results) {
       const hasElevated = 
@@ -363,12 +356,27 @@ Respond with extra care:
         dass21Results.severityLevels.stress.level !== 'Normal';
       
       if (hasElevated) {
-        message += ' How are you feeling today?';
+        const options = [
+          ' How has your headspace been today?',
+          ' What has felt heaviest today, if anything?',
+          ' Want to talk through what is on your mind right now?',
+        ];
+        message += options[Math.floor(Math.random() * options.length)];
       } else {
-        message += " What's on your mind today?";
+        const options = [
+          " What is on your mind today?",
+          " How is your day actually going so far?",
+          " Want to chat about anything specific, or just talk it out?",
+        ];
+        message += options[Math.floor(Math.random() * options.length)];
       }
     } else {
-      message += ' How can I help you today?';
+      const options = [
+        ' What feels most important for us to talk about first?',
+        ' Want to vent, reflect, or make a small plan together?',
+        ' Where do you want to start today?',
+      ];
+      message += options[Math.floor(Math.random() * options.length)];
     }
     
     return message;

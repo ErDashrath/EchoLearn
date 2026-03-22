@@ -74,9 +74,9 @@ export interface MemoryConfig {
 // =============================================================================
 
 const DEFAULT_CONFIG: MemoryConfig = {
-  recentWindowSize: 6,
-  summarizeThreshold: 4,
-  maxSummaryLength: 500,
+  recentWindowSize: 10,
+  summarizeThreshold: 6,
+  maxSummaryLength: 700,
 };
 
 // =============================================================================
@@ -300,7 +300,7 @@ class ChatMemoryService {
    * the recent window.
    */
   private formatFallbackContextForPrompt(olderMessages: ChatMessage[]): string {
-    const fallbackWindow = 4;
+    const fallbackWindow = 6;
     const maxCharsPerMessage = 180;
     const snippets = olderMessages.slice(-fallbackWindow);
 

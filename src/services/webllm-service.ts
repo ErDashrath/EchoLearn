@@ -35,8 +35,10 @@ class WebLLMService {
   private currentModel: string | null = null;
   private activeModel: string | null = null; // Track the actively loaded model
   private isInitializing = false;
+  private loadingModel: WebLLMModel | null = null;
   private downloadStartTime = 0;
   private lastBytesLoaded = 0;
+  private lastProgressTimestamp = 0;
   private progressCallback: ((progress: WebLLMProgress) => void) | null = null;
   private stopCallback: (() => void) | null = null;
   private isGenerating = false;
@@ -377,40 +379,119 @@ class WebLLMService {
   }
 
   private handleProgress(progress: any, isModelCached: boolean) {
-    const percentage = Math.round(progress.progress * 100);
+    const progressRatio = this.getProgressRatio(progress);
+    const percentage = Math.round(progressRatio * 100);
+    const statusText = this.getProgressStatus(progress, isModelCached);
     
     if (isModelCached) {
       this.progressCallback?.({
-        progress: progress.progress,
-        text: `Loading cached model: ${percentage}%`
+        progress: progressRatio,
+        text: `${statusText}: ${percentage}%`
       });
     } else {
-      const downloadInfo = this.calculateDownloadDetails(progress);
+      const downloadInfo = this.calculateDownloadDetails(progress, progressRatio);
+      const transferText = downloadInfo.totalBytes > 0
+        ? `${downloadInfo.downloadedText} / ${downloadInfo.totalText}`
+        : `${downloadInfo.downloadedText} downloaded`;
+      const speedText = downloadInfo.speedText ? ` at ${downloadInfo.speedText}` : '';
+
       this.progressCallback?.({
-        progress: progress.progress,
-        text: `Downloading: ${percentage}% (${downloadInfo.downloaded}MB / ${downloadInfo.total}MB)`,
-        loaded: progress.loaded,
-        total: progress.total
+        progress: progressRatio,
+        text: `${statusText}: ${percentage}% (${transferText}${speedText})`,
+        loaded: downloadInfo.loadedBytes,
+        total: downloadInfo.totalBytes || undefined
       });
     }
   }
 
-  private calculateDownloadDetails(progress: any) {
+  private calculateDownloadDetails(progress: any, progressRatio: number) {
+    const expectedTotalBytes = this.loadingModel
+      ? Math.round(this.loadingModel.sizeGB * 1024 * 1024 * 1024)
+      : 0;
+    const totalBytes = this.getNumericValue(progress.total) ?? expectedTotalBytes;
+    const loadedFromProgress = this.getNumericValue(progress.loaded);
+    const estimatedLoadedBytes = totalBytes > 0
+      ? Math.min(totalBytes, Math.max(0, Math.round(totalBytes * progressRatio)))
+      : 0;
+    const loadedBytes = loadedFromProgress ?? estimatedLoadedBytes;
     const currentTime = Date.now();
-    const totalMB = progress.total ? Math.round(progress.total / (1024 * 1024)) : 0;
-    const downloadedMB = progress.loaded ? Math.round(progress.loaded / (1024 * 1024)) : 0;
-    
-    const timeDiff = (currentTime - this.downloadStartTime) / 1000;
-    const bytesDiff = (progress.loaded || 0) - this.lastBytesLoaded;
-    const speedMBps = timeDiff > 0 ? Math.round((bytesDiff / timeDiff) / (1024 * 1024) * 10) / 10 : 0;
-    
-    this.lastBytesLoaded = progress.loaded || 0;
-    
+    let speedBytesPerSecond = 0;
+
+    if (this.lastProgressTimestamp > 0) {
+      const timeDiffSeconds = Math.max(0.25, (currentTime - this.lastProgressTimestamp) / 1000);
+      const bytesDiff = Math.max(0, loadedBytes - this.lastBytesLoaded);
+      speedBytesPerSecond = bytesDiff > 0 ? bytesDiff / timeDiffSeconds : 0;
+    }
+
+    this.lastBytesLoaded = loadedBytes;
+    this.lastProgressTimestamp = currentTime;
+
     return {
-      total: totalMB,
-      downloaded: downloadedMB,
-      speed: speedMBps
+      totalBytes,
+      loadedBytes,
+      downloadedText: this.formatBytes(loadedBytes),
+      totalText: totalBytes > 0 ? this.formatBytes(totalBytes) : 'Unknown size',
+      speedText: speedBytesPerSecond > 0 ? this.formatSpeed(speedBytesPerSecond) : '',
     };
+  }
+
+  private getProgressRatio(progress: any): number {
+    const rawProgress = this.getNumericValue(progress?.progress);
+    if (rawProgress !== null) {
+      const normalized = rawProgress > 1 ? rawProgress / 100 : rawProgress;
+      return Math.min(1, Math.max(0, normalized));
+    }
+
+    const loaded = this.getNumericValue(progress?.loaded);
+    const total = this.getNumericValue(progress?.total);
+    if (loaded !== null && total && total > 0) {
+      return Math.min(1, Math.max(0, loaded / total));
+    }
+
+    return 0;
+  }
+
+  private getProgressStatus(progress: any, isModelCached: boolean): string {
+    const status = [
+      progress?.text,
+      progress?.message,
+      progress?.status,
+    ].find((value) => typeof value === 'string' && value.trim().length > 0)?.trim();
+
+    if (status) {
+      return status.replace(/\.$/, '');
+    }
+
+    return isModelCached ? 'Loading cached model' : 'Downloading model';
+  }
+
+  private getNumericValue(value: unknown): number | null {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+
+    if (typeof value === 'string') {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    return null;
+  }
+
+  private formatBytes(bytes: number): string {
+    if (bytes >= 1024 * 1024 * 1024) {
+      return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+    }
+
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  private formatSpeed(bytesPerSecond: number): string {
+    if (bytesPerSecond >= 1024 * 1024 * 1024) {
+      return `${(bytesPerSecond / (1024 * 1024 * 1024)).toFixed(2)} GB/s`;
+    }
+
+    return `${(bytesPerSecond / (1024 * 1024)).toFixed(1)} MB/s`;
   }
 
   async loadModel(modelId: string): Promise<boolean> {
@@ -427,14 +508,16 @@ class WebLLMService {
     
     try {
       this.isInitializing = true;
+      this.loadingModel = model;
       this.downloadStartTime = Date.now();
       this.lastBytesLoaded = 0;
+      this.lastProgressTimestamp = 0;
 
       await this.loadWebLLM();
 
       this.progressCallback?.({
         progress: 0,
-        text: isModelCached ? 'Loading cached model...' : 'Starting download...'
+        text: isModelCached ? 'Loading cached model...' : `Starting download (${model.size})...`
       });
 
       this.engine = new this.webllm.MLCEngine();
@@ -475,6 +558,9 @@ class WebLLMService {
       return false;
     } finally {
       this.isInitializing = false;
+      this.loadingModel = null;
+      this.lastBytesLoaded = 0;
+      this.lastProgressTimestamp = 0;
     }
   }
 

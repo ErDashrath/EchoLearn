@@ -4,9 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { X, FileText, FileCode, Database, Download, Check, Loader2 } from "lucide-react";
+import { X, FileText, FileCode, Database, Download, Check, Loader2, Gauge } from "lucide-react";
 import { TTSToggle } from "@/components/TTSToggle";
 import { webllmService, type WebLLMModel } from "@/services/webllm-service";
+import { vectorMemoryService, type VectorMemoryMode } from "@/services/vector-memory-service";
 import type { ChatMode, FocusMode } from "@/types/schema";
 
 interface SettingsPanelProps {
@@ -63,13 +64,14 @@ export function SettingsPanel({
     grammarImprovements: 0,
     speakingTime: "0 min"
   },
-  webllmEnabled = false,
-  onWebLLMToggle,
+  webllmEnabled: _webllmEnabled = false,
+  onWebLLMToggle: _onWebLLMToggle,
   selectedModel,
   onModelSelect
 }: SettingsPanelProps) {
   const [selectedLanguage, setSelectedLanguage] = useState("us");
   const [selectedLevel, setSelectedLevel] = useState("intermediate");
+  const [memoryMode, setMemoryMode] = useState<VectorMemoryMode>(vectorMemoryService.getMode());
   const [downloadingModel, setDownloadingModel] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<{ progress: number; text: string } | null>(null);
 
@@ -104,8 +106,10 @@ export function SettingsPanel({
     }
   };
 
-  const handleWebLLMToggle = () => {
-    onWebLLMToggle?.(!webllmEnabled);
+  const handleMemoryModeToggle = () => {
+    const nextMode: VectorMemoryMode = memoryMode === 'performance' ? 'quality' : 'performance';
+    vectorMemoryService.setMode(nextMode);
+    setMemoryMode(nextMode);
   };
 
   return (
@@ -198,6 +202,37 @@ export function SettingsPanel({
                   <div className="space-y-3">
                     <label className="text-sm font-medium">Voice Output</label>
                     <TTSToggle enabled={ttsEnabled} onToggle={onTTSToggle} />
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-3">
+                    <label className="text-sm font-medium">Memory Mode</label>
+                    <Button
+                      variant="outline"
+                      onClick={handleMemoryModeToggle}
+                      className={`w-full justify-between ${
+                        memoryMode === 'performance'
+                          ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                          : 'border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-300'
+                      }`}
+                      title={
+                        memoryMode === 'performance'
+                          ? 'Performance mode uses lower RAM and faster retrieval.'
+                          : 'Quality mode uses richer semantic memory and more RAM.'
+                      }
+                    >
+                      <span className="flex items-center gap-2">
+                        <Gauge className="h-4 w-4" />
+                        {memoryMode === 'performance' ? 'Performance' : 'Quality'}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        Tap to switch
+                      </span>
+                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                      Performance is recommended on 8GB RAM. Quality improves semantic recall but uses more memory.
+                    </p>
                   </div>
                 </CardContent>
               </Card>

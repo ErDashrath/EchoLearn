@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "MINDSCRIBE",
-  "version": "0.1.0",
+  "productName": "MindScribe",
+  "version": "2.0.0",
   "identifier": "com.mindscribe.app",
   "build": {
     "frontendDist": "../dist",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "MINDSCRIBE V.0.1 BY BIG D AND TEAM",
+        "title": "MindScribe v2.0 by MindScribe Team",
         "width": 800,
         "height": 600,
         "resizable": true,

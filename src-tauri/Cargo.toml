@@ -1,8 +1,8 @@
 [package]
 name = "app"
-version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+version = "2.0.0"
+description = "MindScribe Desktop"
+authors = ["MindScribe Team"]
 license = ""
 repository = ""
 edition = "2021"
@@ -23,3 +23,13 @@ serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
 tauri = { version = "2.9.5", features = [] }
 tauri-plugin-log = "2"
+
+[profile.release]
+# Lower optimization pressure to avoid LLVM OOM on low-memory machines.
+opt-level = 0
+lto = false
+codegen-units = 16
+debug = false
+incremental = false
+panic = "abort"
+strip = "debuginfo"
