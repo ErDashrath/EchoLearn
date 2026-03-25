@@ -16,32 +16,25 @@ import { Button } from "@/components/ui/button";
 import { ChatArea } from "@/components/chat/ChatArea";
 import { InputArea } from "@/components/chat/InputArea";
 import { ChatHistory } from "@/components/chat/ChatHistory";
-import { ModelSelector } from "@/components/navigation/ModelSelector";
 import { usePersistentChat } from "@/hooks/use-persistent-chat";
 import { useAuth } from "@/contexts/AuthContext";
-import { useTheme } from "@/components/ui/theme-provider";
 import {
-  Bot,
-  Moon,
-  Sun,
-  Volume2,
-  VolumeX,
   History,
-  Brain,
-  Sparkles,
   Plus,
-  Gauge,
 } from "lucide-react";
 import type { DASS21Results } from "@/services/mental-health-prompt-service";
-import { vectorMemoryService, type VectorMemoryMode } from "@/services/vector-memory-service";
 import type { Message } from "@/types/schema";
 
 export default function ChatPage() {
   const [showHistory, setShowHistory] = useState(false);
   const [dass21Results, setDass21Results] = useState<DASS21Results | null>(null);
-  const [memoryMode, setMemoryMode] = useState<VectorMemoryMode>(vectorMemoryService.getMode());
-  const { theme, toggleTheme } = useTheme();
+  const [welcomeDraft, setWelcomeDraft] = useState('');
   const { user, getDASS21Results, hasCompletedDASS21 } = useAuth();
+  const suggestionChips = [
+    'Feeling overwhelmed',
+    'Just want to talk',
+    'Reflect on today',
+  ];
 
   // F009: Load DASS-21 results for personalized AI
   useEffect(() => {
@@ -59,24 +52,45 @@ export default function ChatPage() {
     session,
     sessions,
     messages,
-    memoryContext,
     isLoading,
     isGenerating,
-    isSummarizing,
-    selectedModel,
-    ttsEnabled,
     createNewSession,
     loadSession,
     deleteSession,
     sendMessage,
     stopGeneration,
-    selectModel,
-    toggleTTS,
     messagesEndRef,
   } = usePersistentChat({
     userName: user?.name || user?.username,
     dass21Results,
   });
+
+  useEffect(() => {
+    const runAction = (action: 'new' | 'history') => {
+      if (action === 'new') {
+        createNewSession();
+      } else {
+        setShowHistory(true);
+      }
+    };
+
+    const pending = sessionStorage.getItem('pendingChatAction') as 'new' | 'history' | null;
+    if (pending) {
+      runAction(pending);
+      sessionStorage.removeItem('pendingChatAction');
+    }
+
+    const onAction = (event: Event) => {
+      const customEvent = event as CustomEvent<'new' | 'history'>;
+      if (customEvent.detail === 'new' || customEvent.detail === 'history') {
+        runAction(customEvent.detail);
+        sessionStorage.removeItem('pendingChatAction');
+      }
+    };
+
+    window.addEventListener('mindscribe:chat-action', onAction as EventListener);
+    return () => window.removeEventListener('mindscribe:chat-action', onAction as EventListener);
+  }, [createNewSession]);
 
   // Convert messages to the format expected by ChatArea
   const formattedMessages: Message[] = messages.map((msg, index) => ({
@@ -89,26 +103,8 @@ export default function ChatPage() {
     feedback: null,
   }));
 
-  // F009: Get personalized greeting
-  const getPersonalizedGreeting = () => {
-    const name = user?.name || user?.username || '';
-    const hour = new Date().getHours();
-    let greeting = 'Hello';
-    if (hour >= 5 && hour < 12) greeting = 'Good morning';
-    else if (hour >= 12 && hour < 17) greeting = 'Good afternoon';
-    else if (hour >= 17 && hour < 21) greeting = 'Good evening';
-
-    return name ? `${greeting}, ${name}` : greeting;
-  };
-
-  const toggleMemoryMode = () => {
-    const nextMode: VectorMemoryMode = memoryMode === 'performance' ? 'quality' : 'performance';
-    vectorMemoryService.setMode(nextMode);
-    setMemoryMode(nextMode);
-  };
-
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col">
+    <div className="journal-shell min-h-screen bg-[var(--bg)] text-[var(--text-primary)] flex flex-col [font-family:Inter,sans-serif]">
       {/* Chat History Sidebar */}
       <ChatHistory
         isOpen={showHistory}
@@ -128,92 +124,35 @@ export default function ChatPage() {
       />
 
       {/* Header */}
-      <header className="flex items-center justify-between p-4 border-b border-gray-800">
+      <header className="flex items-center justify-between p-5 border-b border-[var(--inner)]">
         <div className="flex items-center space-x-4">
           {/* History Toggle */}
           <Button
             variant="ghost"
             size="icon"
             onClick={() => setShowHistory(!showHistory)}
-            className={`h-10 w-10 rounded-lg hover:bg-gray-800 ${
-              showHistory ? 'text-blue-400 bg-blue-900/20' : 'text-gray-400'
+            className={`h-10 w-10 rounded-lg transition-colors duration-200 ${
+              showHistory ? 'text-[var(--text-primary)] bg-[var(--inner)]' : 'text-[var(--text-secondary)] hover:bg-[var(--inner)]'
             }`}
           >
             <History className="h-5 w-5" />
           </Button>
 
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-              <Bot className="h-4 w-4 text-white" />
-            </div>
-            <span className="font-semibold text-lg">MindScribe</span>
-            {/* F009: Show personalization badge when DASS-21 is active */}
-            {dass21Results ? (
-              <span className="text-xs text-emerald-400 bg-emerald-900/30 px-2 py-1 rounded flex items-center gap-1">
-                <Brain className="h-3 w-3" />
-                Personalized
-              </span>
-            ) : (
-              <span className="text-sm text-gray-400 bg-gray-800 px-2 py-1 rounded">Your Therapist</span>
-            )}
+          <div className="flex flex-col">
+            <span className="nav-title text-lg text-[var(--text-primary)]">MindScribe</span>
+            <span className="text-xs text-[var(--text-secondary)]">This is your space. You can take your time.</span>
           </div>
         </div>
 
         <div className="flex items-center space-x-2">
-          {/* Memory indicator */}
-          {memoryContext?.summary && (
-            <div className="hidden md:flex items-center gap-1.5 text-xs text-purple-400 bg-purple-900/20 px-2 py-1 rounded">
-              <Sparkles className="h-3 w-3" />
-              Memory Active
-              {isSummarizing && <span className="animate-pulse">•</span>}
-            </div>
-          )}
-
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
-            onClick={toggleMemoryMode}
-            className={`hidden md:flex items-center gap-1.5 border-gray-700 text-xs ${
-              memoryMode === 'performance'
-                ? 'bg-emerald-900/20 text-emerald-300 hover:bg-emerald-900/30'
-                : 'bg-blue-900/20 text-blue-300 hover:bg-blue-900/30'
-            }`}
-            title={
-              memoryMode === 'performance'
-                ? 'Performance mode: lower RAM usage, faster retrieval.'
-                : 'Quality mode: richer semantic embeddings, higher RAM usage.'
-            }
+            onClick={createNewSession}
+            className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--inner)] transition-colors duration-200"
           >
-            <Gauge className="h-3.5 w-3.5" />
-            {memoryMode === 'performance' ? 'Memory: Performance' : 'Memory: Quality'}
-          </Button>
-
-          {/* Model Selector */}
-          <ModelSelector
-            selectedModel={selectedModel || "llama-3.2-3b"}
-            onModelSelect={selectModel}
-            isLoading={isGenerating}
-            onOpenSidebar={() => {}}
-          />
-
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => toggleTTS(!ttsEnabled)}
-            className={`h-10 w-10 rounded-lg hover:bg-gray-800 ${
-              ttsEnabled ? 'text-blue-400 bg-blue-900/20' : 'text-gray-400'
-            }`}
-          >
-            {ttsEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleTheme}
-            className="h-10 w-10 rounded-lg hover:bg-gray-800 text-gray-400"
-          >
-            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            <Plus className="h-3.5 w-3.5 mr-1.5" />
+            New Chat
           </Button>
         </div>
       </header>
@@ -222,127 +161,60 @@ export default function ChatPage() {
       <div className="flex-1 flex flex-col">
         {formattedMessages.length === 0 ? (
           /* Welcome Screen */
-          <div className="flex-1 flex flex-col items-center justify-center px-6 max-w-3xl mx-auto w-full">
+          <div className="flex-1 flex flex-col items-center justify-center px-6 max-w-[720px] mx-auto w-full">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="text-center mb-12"
+              className="text-center mb-10"
             >
-              <h1 className="text-4xl font-normal mb-4 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-                {getPersonalizedGreeting()}
+              <h1 className="greeting text-[var(--text-primary)]">
+                What&apos;s been on your mind today?
               </h1>
-              <p className="text-gray-400 text-lg">
-                {dass21Results
-                  ? "I'm here with personalized support based on your assessment. How are you feeling today?"
-                  : "How are you feeling today? I'm here to listen, understand, and support you through anything."}
-              </p>
+
+              <div className="flex items-center justify-center gap-2 flex-wrap mt-4">
+                {suggestionChips.map((chip) => (
+                  <button
+                    key={chip}
+                    type="button"
+                    onClick={() => setWelcomeDraft(chip)}
+                    className="bg-[var(--inner)] rounded-full px-[14px] py-[8px] text-sm text-[var(--text-primary)] cursor-pointer hover:bg-[var(--card)] transition-colors duration-200"
+                  >
+                    {chip}
+                  </button>
+                ))}
+              </div>
 
               {/* Memory info */}
               {sessions.length > 0 && (
-                <p className="text-sm text-gray-500 mt-4">
+                <p className="text-sm text-[var(--text-secondary)] mt-4">
                   You have {sessions.length} saved conversation{sessions.length !== 1 ? 's' : ''}.{' '}
                   <button
-                    className="text-blue-400 hover:underline"
+                    className="text-[var(--text-primary)] hover:underline"
                     onClick={() => setShowHistory(true)}
                   >
                     View history
                   </button>
                 </p>
               )}
-
-              {/* F009: Show severity indicators if elevated */}
-              {dass21Results && (
-                <div className="flex justify-center gap-2 mt-4">
-                  {dass21Results.severityLevels.depression.level !== 'Normal' && (
-                    <span className="text-xs px-2 py-1 rounded-full bg-blue-900/30 text-blue-400">
-                      Depression Support Active
-                    </span>
-                  )}
-                  {dass21Results.severityLevels.anxiety.level !== 'Normal' && (
-                    <span className="text-xs px-2 py-1 rounded-full bg-amber-900/30 text-amber-400">
-                      Anxiety Support Active
-                    </span>
-                  )}
-                  {dass21Results.severityLevels.stress.level !== 'Normal' && (
-                    <span className="text-xs px-2 py-1 rounded-full bg-rose-900/30 text-rose-400">
-                      Stress Support Active
-                    </span>
-                  )}
-                </div>
-              )}
             </motion.div>
 
             {/* Input Area */}
-            <div className="w-full max-w-3xl">
-              <div className="relative">
+            <div className="w-full max-w-[720px]">
+              <div className="sticky bottom-5 z-20">
                 <InputArea
                   onSendMessage={sendMessage}
                   disabled={isGenerating || isLoading}
-                  placeholder="Share what's on your mind... I'm here to listen."
+                  placeholder="Start typing... no structure needed."
                   isWelcomeScreen={true}
+                  draftMessage={welcomeDraft}
+                  onDraftChange={setWelcomeDraft}
                 />
-              </div>
-
-              {/* Quick Action Buttons */}
-              <div className="flex flex-wrap gap-3 mt-6 justify-center">
-                <Button
-                  variant="outline"
-                  className="bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700 hover:text-white"
-                  onClick={() => sendMessage("I'm feeling anxious and need someone to talk to")}
-                >
-                  Feeling Anxious
-                </Button>
-                <Button
-                  variant="outline"
-                  className="bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700 hover:text-white"
-                  onClick={() => sendMessage("I'm dealing with stress and need coping strategies")}
-                >
-                  Managing Stress
-                </Button>
-                <Button
-                  variant="outline"
-                  className="bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700 hover:text-white"
-                  onClick={() => sendMessage("I need help processing my emotions today")}
-                >
-                  Process Emotions
-                </Button>
-                <Button
-                  variant="outline"
-                  className="bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700 hover:text-white"
-                  onClick={() => sendMessage("I want to talk about my relationships and get advice")}
-                >
-                  Relationship Support
-                </Button>
               </div>
             </div>
           </div>
         ) : (
           /* Chat Area */
           <div className="flex-1 flex flex-col">
-            {/* Session info bar */}
-            <div className="px-4 py-2 border-b border-gray-800 flex items-center justify-between text-sm">
-              <div className="flex items-center gap-3">
-                <span className="text-gray-400">
-                  {session?.title || 'Current Chat'}
-                </span>
-                {memoryContext?.summary && (
-                  <span className="text-xs text-purple-400 flex items-center gap-1">
-                    <Brain className="h-3 w-3" />
-                    {memoryContext.summary.messageCount} messages summarized
-                  </span>
-                )}
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={createNewSession}
-                className="text-gray-400 hover:text-white h-7 px-2"
-              >
-                <Plus className="h-3 w-3 mr-1" />
-                New Chat
-              </Button>
-            </div>
-
             <ChatArea
               messages={formattedMessages}
               isLoading={isGenerating}
@@ -351,11 +223,11 @@ export default function ChatPage() {
               isWebllmGenerating={isGenerating}
               onStopGeneration={stopGeneration}
             />
-            <div className="p-4 max-w-2xl mx-auto w-full">
+            <div className="sticky bottom-5 z-20 p-5 max-w-[720px] mx-auto w-full">
               <InputArea
                 onSendMessage={sendMessage}
                 disabled={isGenerating || isLoading}
-                placeholder="Continue the conversation..."
+                placeholder="Start typing... no structure needed."
                 isWelcomeScreen={false}
               />
             </div>

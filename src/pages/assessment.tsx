@@ -21,12 +21,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import {
-  Brain,
   ChevronLeft,
   ChevronRight,
   CheckCircle2,
-  AlertCircle,
-  Info,
   Sparkles,
   Heart,
   Zap,
@@ -44,6 +41,7 @@ interface Question {
 }
 
 interface Section {
+  toneKey: 'low-mood' | 'restlessness' | 'overwhelm';
   name: string;
   description: string;
   icon: React.ElementType;
@@ -88,8 +86,9 @@ interface AssessmentResults {
 
 const sections: Section[] = [
   {
-    name: 'Depression',
-    description: 'Questions about emotional state and motivation',
+    toneKey: 'low-mood',
+    name: 'Low mood',
+    description: 'How steady your energy and outlook have felt',
     icon: Heart,
     color: 'blue',
     bgColor: 'bg-blue-50 dark:bg-blue-950/30',
@@ -105,8 +104,9 @@ const sections: Section[] = [
     ],
   },
   {
-    name: 'Anxiety',
-    description: 'Questions about worry and physical symptoms',
+    toneKey: 'restlessness',
+    name: 'Restlessness',
+    description: 'How tense or unsettled your body has felt',
     icon: Zap,
     color: 'amber',
     bgColor: 'bg-amber-50 dark:bg-amber-950/30',
@@ -122,8 +122,9 @@ const sections: Section[] = [
     ],
   },
   {
-    name: 'Stress',
-    description: 'Questions about tension and irritability',
+    toneKey: 'overwhelm',
+    name: 'Overwhelm',
+    description: 'How stretched or overloaded your week has felt',
     icon: Flame,
     color: 'rose',
     bgColor: 'bg-rose-50 dark:bg-rose-950/30',
@@ -297,40 +298,27 @@ const AssessmentPage: React.FC = () => {
 
   if (showInstructions) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
+      <div className="login-theme min-h-screen flex items-center justify-center p-4 bg-[var(--bg)] [font-family:Inter,sans-serif]">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           className="w-full max-w-2xl"
         >
-          <Card className="border-0 shadow-2xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl">
+          <Card className="border-0 bg-[var(--card)] shadow-[0_14px_36px_rgba(58,74,99,0.14)] transition-shadow duration-200 hover:shadow-[0_18px_44px_rgba(58,74,99,0.18)]">
             <CardHeader className="text-center pb-2">
-              <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/25">
-                <Brain className="w-10 h-10 text-white" />
-              </div>
-              <CardTitle className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                DASS-21 Assessment
+              <CardTitle className="text-3xl font-['Playfair_Display'] text-[var(--text-primary)]">
+                A quick check-in
               </CardTitle>
-              <CardDescription className="text-lg">
-                Depression, Anxiety, and Stress Scale
+              <CardDescription className="text-lg text-[var(--text-secondary)]">
+                Let&apos;s understand how you&apos;ve been feeling lately
               </CardDescription>
             </CardHeader>
             
             <CardContent className="space-y-6">
-              <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl p-6">
-                <div className="flex items-start gap-3">
-                  <Info className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
-                  <div className="space-y-3 text-sm text-blue-900 dark:text-blue-100">
-                    <p className="font-medium">
-                      Welcome{user?.name || user?.username ? `, ${user?.name || user?.username}` : ''}! This assessment helps us understand your current emotional state.
-                    </p>
-                    <p>
-                      Please read each statement and select how much it applied to you <strong>over the past week</strong>.
-                    </p>
-                    <p>
-                      There are no right or wrong answers. Don't spend too much time on any statement.
-                    </p>
-                  </div>
+              <div className="bg-[var(--inner)] rounded-2xl p-5">
+                <div className="space-y-1 text-sm text-[var(--text-primary)] text-center">
+                  <p>There are no right or wrong answers.</p>
+                  <p>Just go with what feels closest to your experience over the past week.</p>
                 </div>
               </div>
 
@@ -339,39 +327,34 @@ const AssessmentPage: React.FC = () => {
                   <div
                     key={section.name}
                     className={cn(
-                      'p-4 rounded-xl border-2 text-center',
-                      section.bgColor,
-                      section.borderColor
+                      'emotion-card p-4 rounded-2xl text-center transition-all duration-200 hover:shadow-[0_10px_24px_rgba(58,74,99,0.12)]',
+                      section.toneKey
                     )}
                   >
-                    <section.icon className="w-8 h-8 mx-auto mb-2 opacity-70" />
-                    <div className="font-semibold">{section.name}</div>
-                    <div className="text-xs opacity-70">{section.questions.length} questions</div>
+                    <div className="card-accent" />
+                    <section.icon className="emotion-icon w-8 h-8 mx-auto mb-2 opacity-90" />
+                    <div className="font-semibold text-[var(--text-primary)]">{section.name}</div>
+                    <div className="text-xs text-[var(--text-secondary)]">{section.questions.length} prompts</div>
                   </div>
                 ))}
               </div>
 
-              <div className="flex items-center gap-2 p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl">
-                <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
-                <p className="text-sm text-amber-900 dark:text-amber-100">
-                  This assessment takes approximately 5-10 minutes to complete.
-                </p>
-              </div>
+              <p className="text-xs text-center text-[var(--text-secondary)]">Takes about 5 minutes</p>
 
               {/* Show previous results info and skip option */}
               {!isLoadingPrevious && previousResults && (
-                <div className="p-4 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-xl">
+                <div className="p-4 bg-[var(--inner)] rounded-2xl">
                   <div className="flex items-start gap-3">
-                    <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
+                    <CheckCircle2 className="w-5 h-5 text-[var(--accent)] mt-0.5 flex-shrink-0" />
                     <div className="flex-1 space-y-2">
-                      <p className="text-sm font-medium text-green-900 dark:text-green-100">
-                        You've already completed an assessment
+                      <p className="text-sm font-medium text-[var(--text-primary)]">
+                        You checked in recently
                       </p>
-                      <p className="text-xs text-green-700 dark:text-green-300">
+                      <p className="text-xs text-[var(--text-secondary)]">
                         Last taken: {new Date(previousResults.completedAt).toLocaleDateString()}
                       </p>
-                      <p className="text-xs text-green-700 dark:text-green-300">
-                        You can retake it to update your results, or skip to continue with your previous assessment.
+                      <p className="text-xs text-[var(--text-secondary)]">
+                        You can update it anytime.
                       </p>
                     </div>
                   </div>
@@ -381,9 +364,9 @@ const AssessmentPage: React.FC = () => {
               <div className="flex flex-col gap-3">
                 <Button
                   onClick={() => setShowInstructions(false)}
-                  className="w-full h-12 text-lg bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 shadow-lg shadow-blue-500/25"
+                  className="w-full h-12 text-lg rounded-full bg-[var(--accent)] hover:bg-[var(--accent-dark)] text-white transition-colors duration-200 shadow-[0_10px_24px_rgba(216,122,67,0.28)]"
                 >
-                  {previousResults ? 'Retake Assessment' : 'Begin Assessment'}
+                  Start check-in
                   <ChevronRight className="ml-2 w-5 h-5" />
                 </Button>
 
@@ -391,10 +374,9 @@ const AssessmentPage: React.FC = () => {
                   <Button
                     onClick={handleSkipToChat}
                     variant="outline"
-                    className="w-full h-12 text-lg border-2"
+                    className="w-full h-12 text-lg rounded-full border-0 bg-[var(--inner)] text-[var(--text-primary)] hover:bg-[var(--inner)]/90 transition-colors duration-200"
                   >
-                    Skip & Go to Chat
-                    <Sparkles className="ml-2 w-5 h-5" />
+                    Skip for now
                   </Button>
                 )}
               </div>

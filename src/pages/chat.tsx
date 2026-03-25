@@ -10,8 +10,7 @@ import { ModelDownloadPanel } from "@/components/chat/ModelDownloadPanel";
 import { useChat } from "@/hooks/use-chat";
 import { useChatSession } from "@/hooks/use-chat-session";
 import { useAuth } from "@/contexts/AuthContext";
-import { useTheme } from "@/components/ui/theme-provider";
-import { Bot, Moon, Sun, Volume2, VolumeX, Brain, Download } from "lucide-react";
+import { Bot, Volume2, VolumeX, Brain } from "lucide-react";
 import type { ChatMode, FocusMode } from "@/types/schema";
 import type { DASS21Results } from "@/services/mental-health-prompt-service";
 
@@ -23,7 +22,6 @@ export default function ChatPage() {
   const [customSystemPrompt, setCustomSystemPrompt] = useState("");
   const [isCustomPromptEnabled, setIsCustomPromptEnabled] = useState(false);
   
-  const { theme, toggleTheme } = useTheme();
   const { user, getDASS21Results, hasCompletedDASS21 } = useAuth();
   
   // Chat session hook for history management
@@ -192,15 +190,6 @@ export default function ChatPage() {
             }`}
           >
             {ttsEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
-          </Button>
-          
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleTheme}
-            className="h-10 w-10 rounded-lg hover:bg-gray-800 text-gray-400"
-          >
-            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
         </div>
       </header>

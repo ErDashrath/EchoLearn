@@ -1,12 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
-import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
-import { RotateCcw, Bot, User, Lightbulb, CheckCircle, Volume2, VolumeX, Copy, Check } from "lucide-react";
+import { Lightbulb, CheckCircle } from "lucide-react";
 import type { Message, GrammarSuggestion, MessageFeedback } from "@/types/schema";
-import { formatDistanceToNow } from "date-fns";
-import { ttsService } from "@/lib/tts-service";
 
 interface MessageBubbleProps {
   message: Message;
@@ -17,44 +13,8 @@ interface MessageBubbleProps {
 export function MessageBubble({ message, onRegenerate, isRegenerating }: MessageBubbleProps) {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [isCopied, setIsCopied] = useState(false);
   const isUser = message.role === "user";
   const isAI = message.role === "assistant";
-
-  const formatTime = (date: string | Date | null | undefined) => {
-    if (!date) return "";
-    const parsedDate = typeof date === "string" ? new Date(date) : date;
-    if (!parsedDate || isNaN(parsedDate.getTime())) return "";
-    return formatDistanceToNow(parsedDate, { addSuffix: true });
-  };
-
-  const handleSpeak = () => {
-    if (isSpeaking) {
-      ttsService.stop();
-    } else {
-      ttsService.speak(message.content);
-    }
-  };
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(message.content);
-      setIsCopied(true);
-      setTimeout(() => setIsCopied(false), 2000); // Reset after 2 seconds
-    } catch (error) {
-      console.error('Failed to copy text:', error);
-    }
-  };
-
-  // Listen for TTS state changes
-  useEffect(() => {
-    const unsubscribe = ttsService.onSpeakingStateChange(() => {
-      setIsSpeaking(ttsService.isSpeaking());
-    });
-
-    return unsubscribe;
-  }, []);
 
   const renderMessageWithSuggestions = (content: string, suggestions: GrammarSuggestion[]) => {
     if (!suggestions || suggestions.length === 0) {
@@ -165,140 +125,26 @@ export function MessageBubble({ message, onRegenerate, isRegenerating }: Message
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
-      className={`flex items-start space-x-4 ${isUser ? "justify-end" : ""}`}
+      transition={{ duration: 0.2 }}
+      className={`flex items-start ${isUser ? "justify-end" : ""}`}
     >
-      {!isUser && (
-        <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-blue-500 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg">
-          <Bot className="h-5 w-5 text-white" />
-        </div>
-      )}
-
-      <div className={`flex-1 ${isUser ? "max-w-sm sm:max-w-lg" : ""}`}>
+      <div className={`w-full ${isUser ? "flex justify-end" : ""}`}>
         <div 
-          className={`px-6 py-4 shadow-lg hover-lift ${
+          className={`${
             isUser 
-              ? "user-bubble rounded-3xl rounded-tr-lg text-gray-800 dark:text-gray-100" 
-              : "ai-bubble rounded-3xl rounded-tl-lg"
+              ? "bg-[#D87A43] rounded-[18px] px-4 py-3 max-w-[70%] text-white"
+              : "bg-transparent px-0 py-2 max-w-[75%]"
           }`}
         >
           {isAI ? (
             <MarkdownRenderer 
               content={message.content} 
-              className="text-foreground"
+              className="text-[#2E3A4F] text-[1.03rem] leading-[1.7]"
             />
           ) : (
-            <p className="leading-relaxed text-gray-800 dark:text-gray-100">
+            <p className="leading-relaxed text-white">
               {renderMessageWithSuggestions(message.content, message.grammarSuggestions || [])}
             </p>
-          )}
-        </div>
-
-        <div className={`flex flex-wrap items-center mt-3 space-x-2 px-2 ${isUser ? "justify-end" : ""}`}>
-          <span className="text-xs font-medium text-muted-foreground">
-            {isUser ? "You" : "Your Therapist"}
-          </span>
-          <span className="text-xs text-muted-foreground/60">•</span>
-          <span className="text-xs text-muted-foreground/80">
-            {formatTime(message.createdAt)}
-          </span>
-          
-          {/* Copy button for all messages */}
-          <span className="text-xs text-muted-foreground/60">•</span>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-xs h-auto p-1 text-gray-600 hover:text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50"
-                onClick={handleCopy}
-              >
-                {isCopied ? (
-                  <Check className="h-3 w-3 mr-1 text-green-600" />
-                ) : (
-                  <Copy className="h-3 w-3 mr-1" />
-                )}
-                {isCopied ? "Copied!" : "Copy"}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              {isCopied ? "Text copied to clipboard" : "Copy message text"}
-            </TooltipContent>
-          </Tooltip>
-          
-          {/* Speak button for AI messages */}
-          {isAI && (
-            <>
-              <span className="text-xs text-muted-foreground/60">•</span>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-xs h-auto p-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20"
-                    onClick={handleSpeak}
-                  >
-                    {isSpeaking ? (
-                      <VolumeX className="h-3 w-3 mr-1" />
-                    ) : (
-                      <Volume2 className="h-3 w-3 mr-1" />
-                    )}
-                    {isSpeaking ? "Stop" : "Speak"}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {isSpeaking ? "Stop speaking" : "Read message aloud"}
-                </TooltipContent>
-              </Tooltip>
-            </>
-          )}
-          
-          {/* Grammar suggestions toggle for user messages */}
-          {isUser && message.grammarSuggestions && message.grammarSuggestions.length > 0 && (
-            <>
-              <span className="text-xs text-muted-foreground/60">•</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-xs h-auto p-1 text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/20"
-                onClick={() => setShowSuggestions(!showSuggestions)}
-              >
-                <Lightbulb className="h-3 w-3 mr-1" />
-                {showSuggestions ? "Hide Suggestions" : "Show Suggestions"}
-              </Button>
-            </>
-          )}
-
-          {/* Feedback toggle for AI messages */}
-          {isAI && message.feedback && (
-            <>
-              <span className="text-xs text-muted-foreground/60">•</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-xs h-auto p-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
-                onClick={() => setShowFeedback(!showFeedback)}
-              >
-                <CheckCircle className="h-3 w-3 mr-1" />
-                {showFeedback ? "Hide Feedback" : "Show Feedback"}
-              </Button>
-            </>
-          )}
-          
-          {isAI && onRegenerate && (
-            <>
-              <span className="text-xs text-muted-foreground/60">•</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-xs h-auto p-1 text-purple-600 hover:text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-900/20"
-                onClick={() => onRegenerate(message.id)}
-                disabled={isRegenerating}
-              >
-                <RotateCcw className="h-3 w-3 mr-1" />
-                {isRegenerating ? "Regenerating..." : "Regenerate"}
-              </Button>
-            </>
           )}
         </div>
 
@@ -312,12 +158,6 @@ export function MessageBubble({ message, onRegenerate, isRegenerating }: Message
           <FeedbackCard feedback={message.feedback} />
         )}
       </div>
-
-      {isUser && (
-        <div className="w-10 h-10 bg-gradient-to-br from-gray-400 to-gray-600 dark:from-gray-500 dark:to-gray-700 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg">
-          <User className="h-5 w-5 text-white" />
-        </div>
-      )}
     </motion.div>
   );
 }
