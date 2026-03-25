@@ -179,14 +179,21 @@ const VoiceTherapyPage: React.FC = () => {
   const [speed, setSpeed] = useState(0.95);
   const [showSettings, setShowSettings] = useState(false);
   const [continuousMode, setContinuousMode] = useState(true);
+  const [continuousSessionActive, setContinuousSessionActive] = useState(false);
   
   // Conversation state
   const [conversation, setConversation] = useState<{ role: 'user' | 'ai'; text: string }[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [diagnosticsRunning, setDiagnosticsRunning] = useState(false);
+  const [voiceDiagnostics, setVoiceDiagnostics] = useState<
+    Array<{ label: string; ok: boolean; detail: string }>
+  >([]);
   const stopRequestedRef = useRef(false);
   const activeRequestIdRef = useRef(0);
   const continuousRestartTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const silenceSubmitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoRearmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const AUTO_REARM_RETRY_MS = 450;
 
   // WebLLM state
   const [llmLoaded, setLlmLoaded] = useState(false);
@@ -202,6 +209,7 @@ const VoiceTherapyPage: React.FC = () => {
     loadProgress,
     error,
     transcript,
+    initialize,
     startListening,
     stopListening,
     speak,
@@ -215,6 +223,96 @@ const VoiceTherapyPage: React.FC = () => {
     autoInitialize: false,
     voice: selectedVoice,
   });
+
+  useEffect(() => {
+    if (!isReady && !isLoading) {
+      void initialize();
+    }
+  }, [initialize, isLoading, isReady]);
+
+  const runVoiceDiagnostics = useCallback(async () => {
+    setDiagnosticsRunning(true);
+
+    const checks: Array<{ label: string; url: string; timeoutMs?: number }> = [
+      { label: 'Piper phonemizer JS', url: '/wasm/piper/piper_phonemize.js' },
+      { label: 'Piper phonemizer WASM', url: '/wasm/piper/piper_phonemize.wasm' },
+      { label: 'Piper worker', url: '/wasm/piper/piper_worker.js' },
+      { label: 'Piper model (Amy)', url: '/models/piper/en_US-amy-medium.onnx', timeoutMs: 20000 },
+      { label: 'Piper model config (Amy)', url: '/models/piper/en_US-amy-medium.onnx.json' },
+      { label: 'Whisper config', url: '/models/transformers/onnx-community/whisper-tiny.en/config.json' },
+      {
+        label: 'Whisper encoder ONNX',
+        url: '/models/transformers/onnx-community/whisper-tiny.en/onnx/encoder_model_quantized.onnx',
+        timeoutMs: 20000,
+      },
+      {
+        label: 'Whisper decoder ONNX',
+        url: '/models/transformers/onnx-community/whisper-tiny.en/onnx/decoder_model_merged_quantized.onnx',
+        timeoutMs: 20000,
+      },
+    ];
+
+    const results = await Promise.all(
+      checks.map(async (check) => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), check.timeoutMs ?? 10000);
+
+        try {
+          const response = await fetch(check.url, {
+            method: 'GET',
+            cache: 'no-store',
+            headers: {
+              Range: 'bytes=0-0',
+            },
+            signal: controller.signal,
+          });
+
+          clearTimeout(timeout);
+          const isSuccess = response.ok || response.status === 206;
+          return {
+            label: check.label,
+            ok: isSuccess,
+            detail: isSuccess
+              ? `OK (${response.status})`
+              : `HTTP ${response.status} ${response.statusText}`,
+          };
+        } catch (diagnosticError) {
+          clearTimeout(timeout);
+          return {
+            label: check.label,
+            ok: false,
+            detail:
+              diagnosticError instanceof Error
+                ? diagnosticError.message
+                : 'Unknown fetch error',
+          };
+        }
+      })
+    );
+
+    results.unshift({
+      label: 'WebLLM model loaded',
+      ok: llmLoaded,
+      detail: llmLoaded
+        ? 'Loaded (voice interaction enabled)'
+        : 'Not loaded (voice action button remains disabled)',
+    });
+
+    results.unshift({
+      label: 'Voice state',
+      ok: !isLoading,
+      detail: isLoading ? `Still initializing (${loadProgress}%)` : 'Initialization not blocked',
+    });
+
+    setVoiceDiagnostics(results);
+    setDiagnosticsRunning(false);
+  }, [isLoading, llmLoaded, loadProgress]);
+
+  useEffect(() => {
+    if (voiceDiagnostics.length === 0) {
+      void runVoiceDiagnostics();
+    }
+  }, [runVoiceDiagnostics, voiceDiagnostics.length]);
 
   // Check WebLLM state
   useEffect(() => {
@@ -377,13 +475,13 @@ const VoiceTherapyPage: React.FC = () => {
       // Speak the response
       await speak(aiResponse, { speed, pitch: 0.9 });
 
-      // If continuous mode, start listening again after speaking
-      if (continuousMode && !isSpeaking && !stopRequestedRef.current) {
+      // If continuous hands-free session is active, request mic re-arm after speaking.
+      if (continuousMode && continuousSessionActive && !stopRequestedRef.current) {
         continuousRestartTimeoutRef.current = setTimeout(() => {
           if (!stopRequestedRef.current) {
             startListening();
           }
-        }, 500);
+        }, 1700);
       }
 
     } catch (err) {
@@ -395,7 +493,7 @@ const VoiceTherapyPage: React.FC = () => {
         setIsProcessing(false);
       }
     }
-  }, [speak, speed, dass21Results, continuousMode, isSpeaking, startListening, user?.username, conversation]);
+  }, [speak, speed, dass21Results, continuousMode, continuousSessionActive, startListening, user?.username, conversation]);
 
   // Handle push-to-talk
   const handlePushToTalk = async () => {
@@ -411,12 +509,16 @@ const VoiceTherapyPage: React.FC = () => {
 
   // One-tap continuous mode (no hold-to-talk needed)
   const handleContinuousToggle = async () => {
-    if (isListening) {
-      await stopListening();
+    // Toggle persistent voice session: one tap starts always-on turn taking; next tap stops.
+    if (continuousSessionActive) {
+      await handleStop();
       return;
     }
 
-    if (!isSpeaking && !isProcessing && !isTranscribing) {
+    stopRequestedRef.current = false;
+    setContinuousSessionActive(true);
+
+    if (!isListening && !isSpeaking && !isProcessing && !isTranscribing) {
       await startListening();
     }
   };
@@ -433,11 +535,76 @@ const VoiceTherapyPage: React.FC = () => {
       clearTimeout(silenceSubmitTimeoutRef.current);
       silenceSubmitTimeoutRef.current = null;
     }
+    if (autoRearmTimeoutRef.current) {
+      clearTimeout(autoRearmTimeoutRef.current);
+      autoRearmTimeoutRef.current = null;
+    }
     await webllmService.stopGeneration();
     await stopListening();
     stopSpeaking();
+    setContinuousSessionActive(false);
     setIsProcessing(false);
   };
+
+  // Auto-rearm listener for continuous session whenever the pipeline becomes idle.
+  useEffect(() => {
+    if (!continuousMode || !continuousSessionActive || stopRequestedRef.current) {
+      if (autoRearmTimeoutRef.current) {
+        clearTimeout(autoRearmTimeoutRef.current);
+        autoRearmTimeoutRef.current = null;
+      }
+      return;
+    }
+
+    if (isListening || isSpeaking || isProcessing || isTranscribing) {
+      if (autoRearmTimeoutRef.current) {
+        clearTimeout(autoRearmTimeoutRef.current);
+        autoRearmTimeoutRef.current = null;
+      }
+      return;
+    }
+
+    const attemptRearm = () => {
+      if (
+        stopRequestedRef.current
+        || !continuousSessionActive
+        || isListening
+        || isSpeaking
+        || isProcessing
+        || isTranscribing
+      ) {
+        autoRearmTimeoutRef.current = null;
+        return;
+      }
+
+      void startListening().then((started) => {
+        if (started) {
+          autoRearmTimeoutRef.current = null;
+          return;
+        }
+
+        autoRearmTimeoutRef.current = setTimeout(attemptRearm, AUTO_REARM_RETRY_MS);
+      });
+    };
+
+    autoRearmTimeoutRef.current = setTimeout(attemptRearm, 250);
+
+    return () => {
+      if (autoRearmTimeoutRef.current) {
+        clearTimeout(autoRearmTimeoutRef.current);
+        autoRearmTimeoutRef.current = null;
+      }
+    };
+  }, [
+    continuousMode,
+    continuousSessionActive,
+    isListening,
+    isSpeaking,
+    isProcessing,
+    isTranscribing,
+    startListening,
+    AUTO_REARM_RETRY_MS,
+  ]);
 
   // Auto-submit after 1.5s silence in continuous mode
   useEffect(() => {
@@ -482,6 +649,9 @@ const VoiceTherapyPage: React.FC = () => {
       }
       if (silenceSubmitTimeoutRef.current) {
         clearTimeout(silenceSubmitTimeoutRef.current);
+      }
+      if (autoRearmTimeoutRef.current) {
+        clearTimeout(autoRearmTimeoutRef.current);
       }
       webllmService.stopGeneration();
       stopSpeaking();
@@ -642,7 +812,9 @@ const VoiceTherapyPage: React.FC = () => {
                           ? `Loading Voice... ${loadProgress}%` 
                           : isReady
                             ? (continuousMode
-                              ? 'Tap once to start. Auto-send after 1.5s silence.'
+                              ? (continuousSessionActive
+                                ? 'Continuous session active. Speak naturally; it will auto-listen each turn.'
+                                : 'Tap once to start continuous session. Tap again to stop.')
                               : 'Press and hold to speak')
                             : 'Preparing voice session...'}
                       </p>
@@ -685,7 +857,7 @@ const VoiceTherapyPage: React.FC = () => {
                       }
                     }
                   } : undefined}
-                  disabled={!llmLoaded || isProcessing || isSpeaking || isLoading || isTranscribing}
+                  disabled={!llmLoaded || isLoading}
                   className={cn(
                     "w-24 h-24 rounded-full flex items-center justify-center transition-all duration-300",
                     "shadow-lg shadow-purple-500/20",
@@ -693,10 +865,12 @@ const VoiceTherapyPage: React.FC = () => {
                       ? "bg-purple-500 scale-110" 
                       : isSpeaking
                         ? "bg-pink-500"
+                        : continuousSessionActive
+                          ? "bg-green-600 hover:bg-green-500"
                         : isLoading || isTranscribing
                           ? "bg-indigo-600"
                           : "bg-slate-700 hover:bg-slate-600",
-                    (!llmLoaded || isProcessing || isLoading) && "opacity-50 cursor-not-allowed"
+                    (!llmLoaded || isLoading) && "opacity-50 cursor-not-allowed"
                   )}
                 >
                   {isLoading ? (
@@ -707,6 +881,8 @@ const VoiceTherapyPage: React.FC = () => {
                     <Mic className="h-10 w-10 text-white" />
                   ) : isSpeaking ? (
                     <Volume2 className="h-10 w-10 text-white animate-pulse" />
+                  ) : continuousSessionActive ? (
+                    <Mic className="h-10 w-10 text-white" />
                   ) : (
                     <MicOff className="h-10 w-10 text-slate-400" />
                   )}
@@ -871,6 +1047,39 @@ const VoiceTherapyPage: React.FC = () => {
             </p>
           </motion.div>
         )}
+
+        {/* Diagnostics */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="mt-4 p-3 bg-slate-900/50 border border-slate-700/50 rounded-lg"
+        >
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <p className="text-slate-300 text-sm flex items-center gap-2">
+              <Info className="h-4 w-4 text-blue-400" />
+              Voice Diagnostics
+            </p>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs text-slate-300 hover:text-white"
+              onClick={() => void runVoiceDiagnostics()}
+              disabled={diagnosticsRunning}
+            >
+              {diagnosticsRunning ? 'Checking...' : 'Re-check'}
+            </Button>
+          </div>
+          <div className="space-y-1">
+            {voiceDiagnostics.map((item) => (
+              <div key={item.label} className="flex items-center justify-between gap-3 text-xs">
+                <span className="text-slate-300">{item.label}</span>
+                <span className={item.ok ? 'text-emerald-400' : 'text-rose-400'}>
+                  {item.ok ? 'OK' : 'FAIL'} - {item.detail}
+                </span>
+              </div>
+            ))}
+          </div>
+        </motion.div>
       </div>
     </div>
   );

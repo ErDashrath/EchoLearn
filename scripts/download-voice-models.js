@@ -12,6 +12,8 @@
 
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
+import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -31,6 +33,9 @@ const whisperBaseLocal = path.join(
 );
 
 const piperBaseLocal = path.join(repoRoot, 'public', 'models', 'piper');
+const whisperCppBaseLocal = path.join(repoRoot, 'public', 'models', 'whisper-cpp');
+const whisperCppBinDir = path.join(repoRoot, 'src-tauri', 'bin', 'whisper');
+const piperBinDir = path.join(repoRoot, 'src-tauri', 'bin', 'piper');
 
 const whisperRepo = 'onnx-community/whisper-tiny.en';
 const hfResolve = (repo, file) => `https://huggingface.co/${repo}/resolve/main/${file}`;
@@ -93,6 +98,24 @@ async function downloadFile(url, destinationPath) {
   const arrayBuffer = await response.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
   await fs.promises.writeFile(destinationPath, buffer);
+}
+
+async function runCommand(command, args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      stdio: 'ignore',
+      shell: false,
+    });
+
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`${command} exited with code ${code}`));
+      }
+    });
+  });
 }
 
 async function downloadIfMissing(url, destinationPath, label) {
@@ -186,6 +209,189 @@ async function preparePiperAssets() {
   return failures;
 }
 
+async function prepareWhisperCppAssets() {
+  console.log('🧠 Preparing Whisper.cpp GGML assets...');
+  const failures = [];
+
+  const modelCandidates = [
+    {
+      file: 'ggml-tiny.en.bin',
+      url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin',
+    },
+    {
+      file: 'ggml-small.en.bin',
+      url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin',
+    },
+    {
+      file: 'ggml-base.en.bin',
+      url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin',
+    },
+  ];
+
+  let downloadedAny = false;
+  for (const candidate of modelCandidates) {
+    const dest = path.join(whisperCppBaseLocal, candidate.file);
+    try {
+      await downloadIfMissing(candidate.url, dest, `Whisper.cpp ${candidate.file}`);
+      downloadedAny = true;
+      break;
+    } catch (error) {
+      failures.push(`Whisper.cpp ${candidate.file}: ${error.message}`);
+    }
+  }
+
+  if (!downloadedAny) {
+    failures.push('Whisper.cpp model: no GGML English model could be downloaded.');
+  }
+
+  return failures;
+}
+
+async function prepareWhisperCppBinary() {
+  if (process.platform !== 'win32') {
+    return [];
+  }
+
+  console.log('⚙️  Preparing Whisper.cpp Windows binary...');
+  const failures = [];
+
+  const preferredBinary = path.join(whisperCppBinDir, 'whisper-cli.exe');
+  const alternateBinary = path.join(whisperCppBinDir, 'main.exe');
+  if ((await fileExists(preferredBinary)) || (await fileExists(alternateBinary))) {
+    console.log('  - Whisper.cpp binary: already present');
+    return failures;
+  }
+
+  const zipUrl = 'https://github.com/ggml-org/whisper.cpp/releases/latest/download/whisper-bin-x64.zip';
+  const tempZip = path.join(os.tmpdir(), 'mindscribe-whisper-bin-x64.zip');
+  const extractDir = path.join(os.tmpdir(), `mindscribe-whisper-extract-${Date.now()}`);
+
+  try {
+    await ensureDir(path.dirname(tempZip));
+    await downloadFile(zipUrl, tempZip);
+    await ensureDir(extractDir);
+
+    await runCommand('powershell', [
+      '-NoLogo',
+      '-NoProfile',
+      '-NonInteractive',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-Command',
+      `Expand-Archive -Path \"${tempZip}\" -DestinationPath \"${extractDir}\" -Force`,
+    ]);
+
+    await ensureDir(whisperCppBinDir);
+    const extractedEntries = await fs.promises.readdir(extractDir, { withFileTypes: true });
+
+    for (const entry of extractedEntries) {
+      const sourcePath = path.join(extractDir, entry.name);
+      if (entry.isDirectory()) {
+        const nestedFiles = await fs.promises.readdir(sourcePath, { withFileTypes: true });
+        for (const nestedEntry of nestedFiles) {
+          if (!nestedEntry.isFile()) continue;
+          const nestedSource = path.join(sourcePath, nestedEntry.name);
+          const dest = path.join(whisperCppBinDir, nestedEntry.name);
+          await fs.promises.copyFile(nestedSource, dest);
+        }
+      } else if (entry.isFile()) {
+        const dest = path.join(whisperCppBinDir, entry.name);
+        await fs.promises.copyFile(sourcePath, dest);
+      }
+    }
+
+    if ((await fileExists(preferredBinary)) || (await fileExists(alternateBinary))) {
+      console.log('  - Whisper.cpp binary: downloaded and extracted');
+    } else {
+      failures.push('Whisper.cpp binary: extraction finished but executable not found.');
+    }
+  } catch (error) {
+    failures.push(`Whisper.cpp binary: ${error.message}`);
+  } finally {
+    try {
+      await fs.promises.rm(tempZip, { force: true });
+      await fs.promises.rm(extractDir, { recursive: true, force: true });
+    } catch {
+      // ignore cleanup failures
+    }
+  }
+
+  return failures;
+}
+
+async function prepareNativePiperBinary() {
+  if (process.platform !== 'win32') {
+    return [];
+  }
+
+  console.log('🎛️  Preparing Native Piper Windows binary...');
+  const failures = [];
+
+  const piperExe = path.join(piperBinDir, 'piper.exe');
+  if (await fileExists(piperExe)) {
+    console.log('  - Native Piper binary: already present');
+    return failures;
+  }
+
+  const zipUrl = 'https://github.com/rhasspy/piper/releases/latest/download/piper_windows_amd64.zip';
+  const tempZip = path.join(os.tmpdir(), 'mindscribe-piper-windows-amd64.zip');
+  const extractDir = path.join(os.tmpdir(), `mindscribe-piper-extract-${Date.now()}`);
+
+  try {
+    await downloadFile(zipUrl, tempZip);
+    await ensureDir(extractDir);
+
+    await runCommand('powershell', [
+      '-NoLogo',
+      '-NoProfile',
+      '-NonInteractive',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-Command',
+      `Expand-Archive -Path \"${tempZip}\" -DestinationPath \"${extractDir}\" -Force`,
+    ]);
+
+    await ensureDir(piperBinDir);
+    const extractedEntries = await fs.promises.readdir(extractDir, { withFileTypes: true });
+    for (const entry of extractedEntries) {
+      const sourcePath = path.join(extractDir, entry.name);
+      if (entry.isDirectory()) {
+        const nestedFiles = await fs.promises.readdir(sourcePath, { withFileTypes: true });
+        for (const nestedEntry of nestedFiles) {
+          if (!nestedEntry.isFile() && !nestedEntry.isDirectory()) continue;
+          const nestedSource = path.join(sourcePath, nestedEntry.name);
+          const nestedDest = path.join(piperBinDir, nestedEntry.name);
+          if (nestedEntry.isDirectory()) {
+            await fs.promises.cp(nestedSource, nestedDest, { recursive: true, force: true });
+          } else {
+            await fs.promises.copyFile(nestedSource, nestedDest);
+          }
+        }
+      } else if (entry.isFile()) {
+        const dest = path.join(piperBinDir, entry.name);
+        await fs.promises.copyFile(sourcePath, dest);
+      }
+    }
+
+    if (await fileExists(piperExe)) {
+      console.log('  - Native Piper binary: downloaded and extracted');
+    } else {
+      failures.push('Native Piper binary: extraction finished but piper.exe was not found.');
+    }
+  } catch (error) {
+    failures.push(`Native Piper binary: ${error.message}`);
+  } finally {
+    try {
+      await fs.promises.rm(tempZip, { force: true });
+      await fs.promises.rm(extractDir, { recursive: true, force: true });
+    } catch {
+      // ignore cleanup failures
+    }
+  }
+
+  return failures;
+}
+
 async function main() {
   if (SKIP_DOWNLOAD) {
     console.log('⏭️  SKIP_VOICE_MODEL_DOWNLOAD=1, skipping model download.');
@@ -197,6 +403,9 @@ async function main() {
   const failures = [
     ...(await prepareWhisperAssets()),
     ...(await preparePiperAssets()),
+    ...(await prepareWhisperCppAssets()),
+    ...(await prepareWhisperCppBinary()),
+    ...(await prepareNativePiperBinary()),
   ];
 
   if (failures.length > 0) {

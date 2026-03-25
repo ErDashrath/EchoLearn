@@ -1,5 +1,6 @@
 mod device_store;
 mod memory_store;
+mod voice_native;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -16,6 +17,13 @@ pub fn run() {
       memory_store::get_user_memory_records,
       memory_store::upsert_memory_records,
       memory_store::delete_memory_records_by_prefixes,
+      voice_native::native_voice_is_available,
+      voice_native::native_piper_is_available,
+      voice_native::native_piper_tts,
+      voice_native::native_whisper_cpp_is_available,
+      voice_native::native_whisper_cpp_transcribe_wav_base64,
+      voice_native::native_voice_tts,
+      voice_native::native_voice_transcribe_wav_base64,
     ])
     .setup(|app| {
       if cfg!(debug_assertions) {

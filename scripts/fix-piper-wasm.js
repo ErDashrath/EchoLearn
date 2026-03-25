@@ -17,6 +17,9 @@ const __dirname = path.dirname(__filename);
 // Path to piper-wasm in node_modules
 const piperWasmPath = path.join(__dirname, '..', 'node_modules', 'piper-wasm');
 const expressionsPath = path.join(piperWasmPath, 'expressions.js');
+const piperWorkerSrcPath = path.join(piperWasmPath, 'piper_worker.js');
+const publicPiperDir = path.join(__dirname, '..', 'public', 'wasm', 'piper');
+const piperWorkerDestPath = path.join(publicPiperDir, 'piper_worker.js');
 
 // Content for the missing expressions.js file
 // This provides a minimal Expressions class that the api.js file imports
@@ -63,15 +66,30 @@ function fixPiperWasm() {
   // Check if expressions.js already exists
   if (fs.existsSync(expressionsPath)) {
     console.log('✅ expressions.js already exists, skipping');
-    return;
+  } else {
+    try {
+      // Create the missing expressions.js file
+      fs.writeFileSync(expressionsPath, expressionsContent, 'utf8');
+      console.log('✅ Created missing expressions.js in piper-wasm');
+    } catch (error) {
+      console.error('❌ Failed to create expressions.js:', error.message);
+      process.exit(1);
+    }
   }
-  
+
   try {
-    // Create the missing expressions.js file
-    fs.writeFileSync(expressionsPath, expressionsContent, 'utf8');
-    console.log('✅ Created missing expressions.js in piper-wasm');
+    if (!fs.existsSync(publicPiperDir)) {
+      fs.mkdirSync(publicPiperDir, { recursive: true });
+    }
+
+    if (fs.existsSync(piperWorkerSrcPath)) {
+      fs.copyFileSync(piperWorkerSrcPath, piperWorkerDestPath);
+      console.log('✅ Copied piper_worker.js to public/wasm/piper');
+    } else {
+      console.log('⚠️  piper_worker.js not found in piper-wasm package');
+    }
   } catch (error) {
-    console.error('❌ Failed to create expressions.js:', error.message);
+    console.error('❌ Failed to publish piper_worker.js:', error.message);
     process.exit(1);
   }
 }
