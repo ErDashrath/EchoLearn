@@ -20,7 +20,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Brain, Shield, Lock, User, Mail, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { Loader2, Lock, User, Mail, Eye, EyeOff, AlertCircle } from 'lucide-react';
 
 // =============================================================================
 // ANIMATIONS
@@ -35,15 +35,6 @@ const pageVariants = {
 const cardVariants = {
   initial: { opacity: 0, scale: 0.95 },
   animate: { opacity: 1, scale: 1, transition: { duration: 0.3, delay: 0.1 } }
-};
-
-const featureVariants = {
-  initial: { opacity: 0, x: -20 },
-  animate: (i: number) => ({
-    opacity: 1,
-    x: 0,
-    transition: { duration: 0.3, delay: 0.2 + i * 0.1 }
-  })
 };
 
 // =============================================================================
@@ -162,94 +153,52 @@ const LoginPage: React.FC = () => {
       initial="initial"
       animate="animate"
       exit="exit"
-      className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950"
+      className="login-theme min-h-screen flex items-center justify-center p-4 bg-[var(--bg)] [font-family:Inter,sans-serif]"
     >
-      <div className="w-full max-w-5xl grid lg:grid-cols-2 gap-8 items-center">
+      <div className="w-full max-w-5xl grid lg:grid-cols-2 gap-8 lg:gap-14 items-center">
         
-        {/* Left Side - Branding */}
+        {/* Left Side - Calming Message */}
         <motion.div 
           variants={cardVariants}
-          className="hidden lg:block space-y-8"
+          className="hidden lg:flex justify-center"
         >
-          {/* Logo */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/25">
-                <Brain className="w-8 h-8 text-white" />
-              </div>
-              <div>
-                <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                  MindScribe
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                  Your Mental Health Companion
-                </p>
-              </div>
-            </div>
-          </div>
-          
-          {/* Features */}
-          <div className="space-y-4">
-            {[
-              { icon: Shield, title: '100% Private', desc: 'All data stays on your device' },
-              { icon: Brain, title: 'AI-Powered', desc: 'Smart insights from your journals' },
-              { icon: Lock, title: 'Encrypted', desc: 'Military-grade AES-256 encryption' }
-            ].map((feature, i) => (
-              <motion.div
-                key={feature.title}
-                custom={i}
-                variants={featureVariants}
-                initial="initial"
-                animate="animate"
-                className="flex items-start gap-4 p-4 rounded-xl bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border border-slate-200/50 dark:border-slate-700/50"
-              >
-                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500/10 to-purple-500/10 flex items-center justify-center shrink-0">
-                  <feature.icon className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-slate-900 dark:text-slate-100">
-                    {feature.title}
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    {feature.desc}
-                  </p>
-                </div>
-              </motion.div>
-            ))}
+          <div className="max-w-sm">
+            <p className="text-3xl leading-tight text-[var(--text-secondary)]">
+              A quiet space to return to your thoughts.
+            </p>
           </div>
         </motion.div>
         
         {/* Right Side - Form */}
         <motion.div variants={cardVariants}>
-          <Card className="w-full max-w-md mx-auto shadow-xl border-slate-200/50 dark:border-slate-800/50 backdrop-blur-sm">
+          <Card className="w-full max-w-md mx-auto bg-[var(--card)] border-0 shadow-[0_14px_36px_rgba(58,74,99,0.14)] transition-shadow duration-200 hover:shadow-[0_18px_44px_rgba(58,74,99,0.18)]">
             <CardHeader className="space-y-1 text-center pb-2">
-              {/* Mobile Logo */}
-              <div className="lg:hidden flex justify-center mb-4">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-                  <Brain className="w-6 h-6 text-white" />
-                </div>
+              <div className="lg:hidden mb-2">
+                <p className="text-lg text-[var(--text-secondary)]">
+                  A quiet space to return to your thoughts.
+                </p>
               </div>
               
-              <CardTitle className="text-2xl font-bold">
+              <CardTitle className="text-3xl text-[var(--text-primary)] font-['Playfair_Display']">
                 {isLoginMode ? 'Welcome back' : 'Create account'}
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-[var(--text-secondary)] text-base">
                 {isLoginMode 
-                  ? 'Enter your credentials to continue' 
+                  ? 'Pick up where you left off' 
                   : 'Start your mental wellness journey'}
               </CardDescription>
             </CardHeader>
             
             <CardContent className="space-y-4">
               {/* Mode Toggle */}
-              <div className="flex rounded-lg bg-slate-100 dark:bg-slate-800 p-1">
+              <div className="flex rounded-xl bg-[var(--inner)] p-1">
                 <button
                   type="button"
                   onClick={() => !isLoginMode && toggleMode()}
-                  className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${
+                  className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium text-[var(--text-primary)] transition-colors duration-200 ${
                     isLoginMode 
-                      ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm' 
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                      ? 'bg-[var(--card)] shadow-sm' 
+                      : 'opacity-80 hover:opacity-100'
                   }`}
                 >
                   Sign In
@@ -257,10 +206,10 @@ const LoginPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => isLoginMode && toggleMode()}
-                  className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${
+                  className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium text-[var(--text-primary)] transition-colors duration-200 ${
                     !isLoginMode 
-                      ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm' 
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                      ? 'bg-[var(--card)] shadow-sm' 
+                      : 'opacity-80 hover:opacity-100'
                   }`}
                 >
                   Sign Up
@@ -286,9 +235,9 @@ const LoginPage: React.FC = () => {
               <form onSubmit={handleSubmit} className="space-y-4">
                 {/* Username */}
                 <div className="space-y-2">
-                  <Label htmlFor="username">Username</Label>
+                  <Label htmlFor="username" className="text-[var(--text-primary)]">Username</Label>
                   <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-secondary)]" />
                     <Input
                       id="username"
                       name="username"
@@ -296,7 +245,7 @@ const LoginPage: React.FC = () => {
                       placeholder="Enter username"
                       value={formData.username}
                       onChange={handleInputChange}
-                      className="pl-10"
+                      className="pl-10 pr-3 py-[14px] h-auto bg-[var(--inner)] border-0 rounded-[14px] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40 transition-colors duration-200"
                       required
                       autoComplete="username"
                     />
@@ -312,9 +261,9 @@ const LoginPage: React.FC = () => {
                       exit={{ opacity: 0, height: 0 }}
                       className="space-y-2"
                     >
-                      <Label htmlFor="email">Email (optional)</Label>
+                      <Label htmlFor="email" className="text-[var(--text-primary)]">Email (optional)</Label>
                       <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-secondary)]" />
                         <Input
                           id="email"
                           name="email"
@@ -322,7 +271,7 @@ const LoginPage: React.FC = () => {
                           placeholder="Enter email"
                           value={formData.email}
                           onChange={handleInputChange}
-                          className="pl-10"
+                          className="pl-10 pr-3 py-[14px] h-auto bg-[var(--inner)] border-0 rounded-[14px] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40 transition-colors duration-200"
                           autoComplete="email"
                         />
                       </div>
@@ -332,9 +281,9 @@ const LoginPage: React.FC = () => {
                 
                 {/* Password */}
                 <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="password" className="text-[var(--text-primary)]">Password</Label>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-secondary)]" />
                     <Input
                       id="password"
                       name="password"
@@ -342,14 +291,14 @@ const LoginPage: React.FC = () => {
                       placeholder="Enter password"
                       value={formData.password}
                       onChange={handleInputChange}
-                      className="pl-10 pr-10"
+                      className="pl-10 pr-10 py-[14px] h-auto bg-[var(--inner)] border-0 rounded-[14px] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40 transition-colors duration-200"
                       required
                       autoComplete={isLoginMode ? 'current-password' : 'new-password'}
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors duration-200"
                     >
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
@@ -365,9 +314,9 @@ const LoginPage: React.FC = () => {
                       exit={{ opacity: 0, height: 0 }}
                       className="space-y-2"
                     >
-                      <Label htmlFor="confirmPassword">Confirm Password</Label>
+                      <Label htmlFor="confirmPassword" className="text-[var(--text-primary)]">Confirm Password</Label>
                       <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-secondary)]" />
                         <Input
                           id="confirmPassword"
                           name="confirmPassword"
@@ -375,7 +324,7 @@ const LoginPage: React.FC = () => {
                           placeholder="Confirm password"
                           value={formData.confirmPassword}
                           onChange={handleInputChange}
-                          className="pl-10"
+                          className="pl-10 pr-3 py-[14px] h-auto bg-[var(--inner)] border-0 rounded-[14px] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40 transition-colors duration-200"
                           required={!isLoginMode}
                           autoComplete="new-password"
                         />
@@ -408,7 +357,7 @@ const LoginPage: React.FC = () => {
                 {/* Submit Button */}
                 <Button 
                   type="submit" 
-                  className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg shadow-blue-500/25"
+                  className="w-full rounded-full bg-[var(--accent)] hover:bg-[var(--accent-dark)] text-white h-12 shadow-[0_10px_24px_rgba(216,122,67,0.28)] transition-colors duration-200"
                   disabled={isLoading}
                 >
                   {isLoading ? (
@@ -417,16 +366,14 @@ const LoginPage: React.FC = () => {
                       {isLoginMode ? 'Signing in...' : 'Creating account...'}
                     </>
                   ) : (
-                    isLoginMode ? 'Sign In' : 'Create Account'
+                    'Continue'
                   )}
                 </Button>
               </form>
               
               {/* Privacy Notice */}
-              <p className="text-xs text-center text-muted-foreground">
-                🔒 Your data is encrypted and stored locally. 
-                <br />
-                We never send your information to any server.
+              <p className="text-sm text-center text-[var(--text-secondary)]">
+                🔒 Your thoughts stay private and on your device.
               </p>
             </CardContent>
           </Card>

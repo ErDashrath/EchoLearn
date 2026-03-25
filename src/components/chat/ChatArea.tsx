@@ -19,22 +19,17 @@ const WelcomeMessage = () => (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
-    className="flex items-start space-x-4"
+    transition={{ duration: 0.2 }}
+     className="flex items-start space-x-4"
   >
-    <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-blue-500 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg">
-      <Bot className="h-5 w-5 text-white" />
+     <div className="w-10 h-10 bg-[var(--inner)] rounded-2xl flex items-center justify-center flex-shrink-0">
+       <Bot className="h-5 w-5 text-[var(--text-secondary)]" />
     </div>
     <div className="flex-1">
-      <div className="ai-bubble rounded-3xl rounded-tl-lg px-6 py-4 shadow-lg hover-lift">
-        <p className="text-foreground leading-relaxed">
-          Hello! I'm your AI English tutor. I'm here to help you practice conversation, 
-          prepare for interviews, or work on specific language skills. How would you like to start today?
+       <div className="rounded-[20px] rounded-tl-md px-6 py-5 bg-[var(--card)] shadow-sm">
+         <p className="text-[var(--text-primary)] leading-relaxed">
+           What&apos;s been on your mind lately?
         </p>
-      </div>
-      <div className="flex items-center space-x-2 mt-3 px-2">
-        <span className="text-xs font-medium text-muted-foreground">Your Therapist</span>
-        <span className="text-xs text-muted-foreground/60">•</span>
-        <span className="text-xs text-muted-foreground/80">Just now</span>
       </div>
     </div>
   </motion.div>
@@ -58,21 +53,30 @@ export function ChatArea({
     scrollToBottom();
   }, [messages, isLoading]);
 
+  const getMessageSpacing = (index: number) => {
+    const current = messages[index];
+    const next = messages[index + 1];
+    if (!next) return 'mb-[18px]';
+    return current.role !== next.role ? 'mb-[28px]' : 'mb-[18px]';
+  };
+
   return (
-    <ScrollArea className="flex-1">
-      <div className="px-6 py-8 space-y-6 max-w-2xl mx-auto">
+     <ScrollArea className="flex-1 bg-[var(--bg)]">
+       <div className="px-6 py-8 max-w-[720px] mx-auto">
+        <p className="text-xs text-[#3A4A63]/70 text-center mb-6">This is your space. You can take your time.</p>
         {/* Welcome message when no messages */}
         {messages.length === 0 && !isLoading && <WelcomeMessage />}
         
         {/* Messages */}
         <AnimatePresence>
-          {messages.map((message) => (
-            <MessageBubble
-              key={message.id}
-              message={message}
-              onRegenerate={onRegenerateMessage}
-              isRegenerating={isRegenerating}
-            />
+          {messages.map((message, index) => (
+            <div key={message.id} className={getMessageSpacing(index)}>
+              <MessageBubble
+                message={message}
+                onRegenerate={onRegenerateMessage}
+                isRegenerating={isRegenerating}
+              />
+            </div>
           ))}
         </AnimatePresence>
         
@@ -85,7 +89,7 @@ export function ChatArea({
               exit={{ opacity: 0 }}
               className="flex justify-center py-4"
             >
-              <div className="text-gray-400 text-sm">AI is thinking...</div>
+               <div className="text-[var(--text-secondary)] text-sm">Reflecting...</div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -103,7 +107,7 @@ export function ChatArea({
                 onClick={onStopGeneration}
                 variant="outline"
                 size="sm"
-                className="bg-red-50 border-red-200 text-red-700 hover:bg-red-100 hover:border-red-300 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/30"
+                 className="bg-[var(--card)] border-[var(--inner)] text-[var(--text-secondary)] hover:bg-[var(--inner)] transition-colors duration-200"
               >
                 <Square className="h-3 w-3 mr-2" />
                 Stop Generation

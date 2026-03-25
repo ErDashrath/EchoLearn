@@ -3,7 +3,6 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { ThemeProvider } from "@/components/ui/theme-provider";
 import { AuthProvider } from "@/contexts/AuthContext";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import AppLayout from "@/components/layout/AppLayout";
@@ -15,6 +14,7 @@ import VoicePage from "@/pages/voice"; // F012-F016: Voice Therapy
 import JournalPage from "@/pages/journal"; // F017-F020: Mental Health Journal
 import DashboardPage from "@/pages/dashboard"; // F021-F025: Mental Health Dashboard
 import ReportsPage from "@/pages/reports"; // F026-F027: Reports & Export
+import SettingsPage from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 import { SystemPromptDemo } from "@/components/demo/SystemPromptDemo";
 
@@ -80,6 +80,15 @@ function Router() {
           </AppLayout>
         </ProtectedRoute>
       </Route>
+
+      {/* Settings */}
+      <Route path="/settings">
+        <ProtectedRoute>
+          <AppLayout>
+            <SettingsPage />
+          </AppLayout>
+        </ProtectedRoute>
+      </Route>
       
       {/* Voice Therapy - Full screen experience */}
       <Route path="/voice">
@@ -96,14 +105,12 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider defaultTheme="dark" storageKey="mindscribe-theme">
-        <AuthProvider>
-          <TooltipProvider>
-            <Toaster />
-            <Router />
-          </TooltipProvider>
-        </AuthProvider>
-      </ThemeProvider>
+      <AuthProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Router />
+        </TooltipProvider>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

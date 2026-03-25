@@ -2,30 +2,44 @@ import { useState, useRef } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { VoiceControls } from "./VoiceControls";
-import { Send, Paperclip, Mic, MicOff } from "lucide-react";
+import { Send, Mic, MicOff } from "lucide-react";
 
 interface InputAreaProps {
   onSendMessage: (message: string) => void;
   disabled?: boolean;
   placeholder?: string;
   isWelcomeScreen?: boolean;
+  draftMessage?: string;
+  onDraftChange?: (message: string) => void;
 }
 
 export function InputArea({ 
   onSendMessage, 
   disabled, 
-  placeholder = "Ask your English tutor anything...", 
-  isWelcomeScreen = false 
+  placeholder = "Start typing... no structure needed.", 
+  isWelcomeScreen = false,
+  draftMessage,
+  onDraftChange
 }: InputAreaProps) {
   const [message, setMessage] = useState("");
   const [showVoiceControls, setShowVoiceControls] = useState(false);  
   const [isListening, setIsListening] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const controlled = typeof draftMessage === "string";
+  const currentMessage = controlled ? draftMessage : message;
+
+  const updateMessage = (nextValue: string) => {
+    if (controlled) {
+      onDraftChange?.(nextValue);
+      return;
+    }
+    setMessage(nextValue);
+  };
 
   const handleSend = () => {
-    if (message.trim() && !disabled) {
-      onSendMessage(message.trim());
-      setMessage("");
+    if (currentMessage.trim() && !disabled) {
+      onSendMessage(currentMessage.trim());
+      updateMessage("");
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
       }
@@ -40,7 +54,7 @@ export function InputArea({
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setMessage(e.target.value);
+    updateMessage(e.target.value);
     // Auto-resize textarea
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -67,14 +81,14 @@ export function InputArea({
         {/* Voice Button */}
         <div className="flex justify-center mb-6">
           <motion.div
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
           >
             <Button
               size="lg"
               onClick={handleVoiceClick}
-              className={`w-16 h-16 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg ${
-                isListening ? 'animate-pulse bg-red-500 hover:bg-red-600' : ''
+              className={`w-14 h-14 rounded-full bg-[var(--inner)] hover:bg-[var(--card)] text-[var(--text-secondary)] shadow-sm transition-colors duration-200 ${
+                isListening ? 'bg-[var(--card)] text-[var(--text-primary)]' : ''
               }`}
             >
               {isListening ? (
@@ -87,35 +101,26 @@ export function InputArea({
         </div>
 
         {/* Input Container */}
-        <div className="relative bg-gray-800 rounded-3xl border border-gray-700 shadow-2xl overflow-hidden">
+        <div className="relative bg-[var(--card)] rounded-[20px] border border-[rgba(216,122,67,0.2)] shadow-[0_4px_20px_rgba(0,0,0,0.05)] overflow-hidden focus-within:border-[var(--accent)] transition-colors duration-200">
           <div className="flex items-end p-4 gap-3">
             <div className="flex-1">
               <textarea
                 ref={textareaRef}
-                value={message}
+                value={currentMessage}
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
                 placeholder={placeholder}
                 disabled={disabled}
                 rows={1}
-                className="w-full bg-transparent text-white placeholder-gray-400 border-none outline-none resize-none text-lg leading-relaxed min-h-[56px] max-h-[200px]"
-                style={{ height: 'auto' }}
+                className="w-full bg-transparent text-[var(--text-primary)] placeholder-[var(--text-secondary)] border-none outline-none resize-none text-lg leading-relaxed min-h-[56px] max-h-[200px] caret-[var(--accent)]"
               />
             </div>
             
             <div className="flex items-center gap-2">
               <Button
-                variant="ghost"
-                size="icon"
-                className="text-gray-400 hover:text-white hover:bg-gray-700 rounded-full"
-              >
-                <Paperclip className="h-5 w-5" />
-              </Button>
-              
-              <Button
                 onClick={handleSend}
-                disabled={!message.trim() || disabled}
-                className="bg-blue-600 hover:bg-blue-700 text-white rounded-full w-12 h-12 p-0 disabled:opacity-50"
+                disabled={!currentMessage.trim() || disabled}
+                className="bg-[var(--accent)] hover:bg-[var(--accent-dark)] text-white rounded-full w-12 h-12 p-0 disabled:opacity-50 transition-colors duration-200"
               >
                 <Send className="h-5 w-5" />
               </Button>
@@ -126,7 +131,7 @@ export function InputArea({
         {/* Voice Controls */}
         <VoiceControls
           onTranscript={handleVoiceTranscript}
-          onTextUpdate={(text) => setMessage(text)}
+          onTextUpdate={(text) => updateMessage(text)}
           isVisible={showVoiceControls}
           onVisibilityChange={(visible) => {
             setShowVoiceControls(visible);
@@ -139,18 +144,18 @@ export function InputArea({
 
   // Regular chat input (compact version)
   return (
-    <div className="relative bg-gray-800 rounded-2xl border border-gray-700 shadow-lg">
-      <div className="flex items-end p-3 gap-2">
+    <div className="relative bg-[var(--card)] rounded-[20px] border border-[rgba(216,122,67,0.2)] shadow-[0_4px_20px_rgba(0,0,0,0.05)] focus-within:border-[var(--accent)] transition-colors duration-200">
+      <div className="flex items-end p-4 gap-2">
         <div className="flex-1">
           <textarea
             ref={textareaRef}
-            value={message}
+            value={currentMessage}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
             disabled={disabled}
             rows={1}
-            className="w-full bg-transparent text-white placeholder-gray-400 border-none outline-none resize-none leading-relaxed min-h-[40px] max-h-[120px]"
+            className="w-full bg-transparent text-[var(--text-primary)] placeholder-[var(--text-secondary)] border-none outline-none resize-none leading-relaxed min-h-[40px] max-h-[120px] caret-[var(--accent)]"
           />
         </div>
         
@@ -159,8 +164,8 @@ export function InputArea({
             variant="ghost"
             size="sm"
             onClick={handleVoiceClick}
-            className={`text-gray-400 hover:text-white hover:bg-gray-700 rounded-full w-8 h-8 p-0 ${
-              isListening ? 'text-red-400' : ''
+            className={`text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--card)] rounded-full w-8 h-8 p-0 transition-colors duration-200 ${
+              isListening ? 'text-[var(--text-primary)]' : ''
             }`}
           >
             {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
@@ -168,8 +173,8 @@ export function InputArea({
           
           <Button
             onClick={handleSend}
-            disabled={!message.trim() || disabled}
-            className="bg-blue-600 hover:bg-blue-700 text-white rounded-full w-8 h-8 p-0 disabled:opacity-50"
+            disabled={!currentMessage.trim() || disabled}
+            className="bg-[var(--accent)] hover:bg-[var(--accent-dark)] text-white rounded-full w-8 h-8 p-0 disabled:opacity-50 transition-colors duration-200"
           >
             <Send className="h-4 w-4" />
           </Button>
@@ -179,7 +184,7 @@ export function InputArea({
       {/* Voice Controls */}
       <VoiceControls
         onTranscript={handleVoiceTranscript}
-        onTextUpdate={(text) => setMessage(text)}
+        onTextUpdate={(text) => updateMessage(text)}
         isVisible={showVoiceControls}
         onVisibilityChange={(visible) => {
           setShowVoiceControls(visible);

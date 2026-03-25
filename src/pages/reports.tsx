@@ -45,7 +45,7 @@ interface ExportFormat {
   name: string;
   description: string;
   icon: React.ElementType;
-  color: string;
+  tintClass: string;
 }
 
 // =============================================================================
@@ -58,21 +58,21 @@ const EXPORT_FORMATS: ExportFormat[] = [
     name: 'PDF Report',
     description: 'Comprehensive mental health summary with charts and analysis',
     icon: FileText,
-    color: 'from-red-500 to-red-600',
+    tintClass: 'bg-[rgba(232,180,160,0.2)]',
   },
   {
     id: 'json',
     name: 'JSON Export',
     description: 'Complete data export for backup or transfer',
     icon: FileJson,
-    color: 'from-yellow-500 to-orange-500',
+    tintClass: 'bg-[rgba(201,217,184,0.2)]',
   },
   {
     id: 'csv',
     name: 'CSV Export',
     description: 'Spreadsheet-compatible format for analysis',
     icon: FileSpreadsheet,
-    color: 'from-green-500 to-emerald-600',
+    tintClass: 'bg-[rgba(183,201,214,0.2)]',
   },
 ];
 
@@ -99,26 +99,27 @@ const FormatCard = memo(({
   onSelect: () => void;
 }) => (
   <motion.button
-    whileHover={{ scale: 1.02 }}
+    whileHover={{ y: -2 }}
     whileTap={{ scale: 0.98 }}
     onClick={onSelect}
     className={cn(
-      'w-full p-4 rounded-xl border-2 text-left transition-all',
+      'w-full p-4 rounded-xl text-left transition-all duration-200 border',
+      format.tintClass,
       selected 
-        ? 'border-blue-500 bg-blue-500/10' 
-        : 'border-white/10 bg-white/5 hover:border-white/20'
+        ? 'border-[rgba(216,122,67,0.45)] shadow-[0_6px_14px_rgba(0,0,0,0.04)]' 
+        : 'border-[rgba(58,74,99,0.12)] hover:shadow-[0_5px_12px_rgba(0,0,0,0.035)]'
     )}
   >
     <div className="flex items-start gap-4">
-      <div className={cn('p-3 rounded-lg bg-gradient-to-br', format.color)}>
-        <format.icon className="w-5 h-5 text-white" />
+      <div className="p-3 rounded-lg bg-[var(--card)] border border-[rgba(58,74,99,0.08)]">
+        <format.icon className="w-5 h-5 text-[var(--text-secondary)]" />
       </div>
       <div className="flex-1">
         <div className="flex items-center gap-2">
-          <h3 className="font-semibold text-white">{format.name}</h3>
-          {selected && <CheckCircle2 className="w-4 h-4 text-blue-400" />}
+          <h3 className="font-semibold text-[var(--text-primary)]">{format.name}</h3>
+          {selected && <CheckCircle2 className="w-4 h-4 text-[var(--accent)]" />}
         </div>
-        <p className="text-sm text-gray-400 mt-1">{format.description}</p>
+        <p className="text-sm text-[var(--text-secondary)] mt-1">{format.description}</p>
       </div>
     </div>
   </motion.button>
@@ -142,23 +143,23 @@ const OptionToggle = memo(({
   disabled?: boolean;
 }) => (
   <label className={cn(
-    'flex items-start gap-4 p-4 rounded-xl border border-white/10 cursor-pointer transition-all',
-    checked && !disabled ? 'bg-white/5 border-blue-500/50' : 'bg-white/[0.02]',
+    'card-soft flex items-start gap-4 p-4 cursor-pointer transition-all',
+    checked && !disabled ? 'bg-[var(--inner-strong)] border-l-[3px] border-l-[var(--accent)]' : '',
     disabled && 'opacity-50 cursor-not-allowed'
   )}>
-    <div className="p-2 rounded-lg bg-white/5">
-      <Icon className="w-4 h-4 text-gray-400" />
+    <div className="p-2 rounded-lg bg-[var(--card)] border border-[rgba(58,74,99,0.08)]">
+      <Icon className="w-4 h-4 text-[var(--text-secondary)]" />
     </div>
     <div className="flex-1">
-      <div className="font-medium text-white">{label}</div>
-      <p className="text-sm text-gray-500 mt-0.5">{description}</p>
+      <div className="font-medium text-[var(--text-primary)]">{label}</div>
+      <p className="text-sm text-[var(--text-secondary)] mt-0.5">{description}</p>
     </div>
     <input
       type="checkbox"
       checked={checked}
       onChange={(e) => onChange(e.target.checked)}
       disabled={disabled}
-      className="w-5 h-5 rounded border-gray-600 bg-white/10 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+      className="w-5 h-5 rounded border-[rgba(58,74,99,0.35)] bg-[var(--card)] text-[var(--accent)] focus:ring-[var(--accent)] focus:ring-offset-0"
     />
   </label>
 ));
@@ -170,25 +171,25 @@ const StatsPreview = memo(({ stats, entries }: { stats: JournalStats | null; ent
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-      <div className="bg-white/5 rounded-xl p-4 text-center">
-        <BookOpen className="w-5 h-5 text-blue-400 mx-auto mb-2" />
-        <div className="text-2xl font-bold text-white">{entries.length}</div>
-        <div className="text-xs text-gray-500">Entries to Export</div>
+      <div className="card-primary p-4 text-center shadow-[0_3px_10px_rgba(0,0,0,0.03)]">
+        <BookOpen className="w-5 h-5 text-[var(--text-secondary)] mx-auto mb-2" />
+        <div className="text-2xl font-semibold text-[var(--text-primary)]">{entries.length}</div>
+        <div className="text-xs text-[var(--text-secondary)]">Entries to Export</div>
       </div>
-      <div className="bg-white/5 rounded-xl p-4 text-center">
-        <FileText className="w-5 h-5 text-purple-400 mx-auto mb-2" />
-        <div className="text-2xl font-bold text-white">{stats.totalWords.toLocaleString()}</div>
-        <div className="text-xs text-gray-500">Words Written</div>
+      <div className="card-primary p-4 text-center shadow-[0_3px_10px_rgba(0,0,0,0.03)]">
+        <FileText className="w-5 h-5 text-[var(--text-secondary)] mx-auto mb-2" />
+        <div className="text-2xl font-semibold text-[var(--text-primary)]">{stats.totalWords.toLocaleString()}</div>
+        <div className="text-xs text-[var(--text-secondary)]">Words Written</div>
       </div>
-      <div className="bg-white/5 rounded-xl p-4 text-center">
-        <Activity className="w-5 h-5 text-green-400 mx-auto mb-2" />
-        <div className="text-2xl font-bold text-white">{((stats.averageMoodScore + 1) * 5).toFixed(1)}</div>
-        <div className="text-xs text-gray-500">Avg Mood Score</div>
+      <div className="card-primary p-4 text-center shadow-[0_3px_10px_rgba(0,0,0,0.03)]">
+        <Activity className="w-5 h-5 text-[var(--text-secondary)] mx-auto mb-2" />
+        <div className="text-2xl font-semibold text-[var(--text-primary)]">{((stats.averageMoodScore + 1) * 5).toFixed(1)}</div>
+        <div className="text-xs text-[var(--text-secondary)]">Avg Mood Score</div>
       </div>
-      <div className="bg-white/5 rounded-xl p-4 text-center">
-        <BarChart3 className="w-5 h-5 text-orange-400 mx-auto mb-2" />
-        <div className="text-2xl font-bold text-white">{Object.keys(stats.emotionFrequency).length}</div>
-        <div className="text-xs text-gray-500">Unique Emotions</div>
+      <div className="card-primary p-4 text-center shadow-[0_3px_10px_rgba(0,0,0,0.03)]">
+        <BarChart3 className="w-5 h-5 text-[var(--text-secondary)] mx-auto mb-2" />
+        <div className="text-2xl font-semibold text-[var(--text-primary)]">{Object.keys(stats.emotionFrequency).length}</div>
+        <div className="text-xs text-[var(--text-secondary)]">Unique Emotions</div>
       </div>
     </div>
   );
@@ -197,11 +198,11 @@ const StatsPreview = memo(({ stats, entries }: { stats: JournalStats | null; ent
 StatsPreview.displayName = 'StatsPreview';
 
 const PrivacyNotice = memo(() => (
-  <div className="flex items-start gap-3 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl">
-    <Shield className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
+  <div className="card-emphasis flex items-start gap-3 p-4">
+    <Shield className="w-5 h-5 text-[var(--text-secondary)]/80 flex-shrink-0 mt-0.5" />
     <div>
-      <h4 className="font-medium text-yellow-300">Privacy Notice</h4>
-      <p className="text-sm text-yellow-200/70 mt-1">
+      <h4 className="font-medium text-[var(--text-primary)]">Privacy Notice</h4>
+      <p className="text-sm text-[var(--text-secondary)] mt-1">
         Your exported data contains sensitive mental health information. Store it securely and 
         be cautious when sharing. All data is processed locally on your device.
       </p>
@@ -213,8 +214,8 @@ PrivacyNotice.displayName = 'PrivacyNotice';
 
 const LoadingState = memo(() => (
   <div className="flex flex-col items-center justify-center py-12">
-    <Loader2 className="w-8 h-8 text-blue-400 animate-spin mb-4" />
-    <p className="text-gray-400">Loading your data...</p>
+    <Loader2 className="w-8 h-8 text-[var(--accent)] animate-spin mb-4" />
+    <p className="text-[var(--text-secondary)]">Loading your data...</p>
   </div>
 ));
 
@@ -226,11 +227,11 @@ const EmptyState = memo(() => (
     animate={{ opacity: 1, scale: 1 }}
     className="flex flex-col items-center justify-center py-16 text-center"
   >
-    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center mb-4">
-      <FileText className="w-8 h-8 text-blue-400" />
+    <div className="w-16 h-16 rounded-2xl bg-[var(--inner)] flex items-center justify-center mb-4 border border-[rgba(58,74,99,0.1)]">
+      <FileText className="w-8 h-8 text-[var(--text-secondary)]" />
     </div>
-    <h2 className="text-xl font-bold text-white mb-2">No Data to Export</h2>
-    <p className="text-gray-400 max-w-md">
+    <h2 className="text-xl font-semibold text-[var(--text-primary)] mb-2">No Data to Export</h2>
+    <p className="text-[var(--text-secondary)] max-w-md">
       Start journaling to generate reports. Your entries and analysis will appear here once you begin tracking your mental health journey.
     </p>
   </motion.div>
@@ -352,14 +353,14 @@ export default function ReportsPage() {
 
   // Render
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
+    <div className="reports-shell reports-main min-h-screen text-[var(--text-primary)] p-6 [font-family:Inter,sans-serif]">
       <div className="max-w-4xl mx-auto space-y-8">
         {/* Header */}
         <div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+          <h1 className="nav-title text-4xl leading-tight text-[var(--text-primary)]">
             Reports & Export
           </h1>
-          <p className="text-gray-400 mt-2">
+          <p className="text-[var(--text-secondary)] mt-2">
             Generate comprehensive reports or export your data for backup and analysis
           </p>
         </div>
@@ -373,58 +374,55 @@ export default function ReportsPage() {
             {/* Privacy Notice */}
             <PrivacyNotice />
 
-            {/* Stats Preview */}
-            {stats && <StatsPreview stats={stats} entries={entries} />}
-
             {/* Export Format Selection */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="space-y-4"
+              className="card-primary p-5 space-y-5"
             >
-              <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                <Download className="w-5 h-5 text-blue-400" />
+              <h2 className="text-lg font-semibold text-[var(--text-primary)] flex items-center gap-2">
+                <Download className="w-5 h-5 text-[var(--text-secondary)]" />
                 Choose Export Format
               </h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {EXPORT_FORMATS.map((format) => (
-                  <FormatCard
-                    key={format.id}
-                    format={format}
-                    selected={selectedFormat === format.id}
-                    onSelect={() => setSelectedFormat(format.id)}
-                  />
-                ))}
-              </div>
-            </motion.div>
 
-            {/* Date Range */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-              className="space-y-4"
-            >
-              <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-purple-400" />
-                Date Range
-              </h2>
-              <div className="flex flex-wrap gap-2">
-                {DATE_RANGES.map((range) => (
-                  <button
-                    key={range.value}
-                    onClick={() => setDateRange(range.value)}
-                    className={cn(
-                      'px-4 py-2 rounded-lg text-sm font-medium transition-all',
-                      dateRange === range.value
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-white/5 text-gray-400 hover:bg-white/10'
-                    )}
-                  >
-                    {range.label}
-                  </button>
-                ))}
+              <div className="card-soft p-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {EXPORT_FORMATS.map((format) => (
+                    <FormatCard
+                      key={format.id}
+                      format={format}
+                      selected={selectedFormat === format.id}
+                      onSelect={() => setSelectedFormat(format.id)}
+                    />
+                  ))}
+                </div>
               </div>
+
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-[var(--text-secondary)]" />
+                  Date Range
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {DATE_RANGES.map((range) => (
+                    <button
+                      key={range.value}
+                      onClick={() => setDateRange(range.value)}
+                      className={cn(
+                        'px-4 py-2 rounded-lg text-sm font-medium transition-all border border-transparent',
+                        dateRange === range.value
+                          ? 'bg-[var(--inner-strong)] text-[var(--accent)]'
+                          : 'bg-[var(--card)] text-[var(--text-secondary)] hover:bg-[var(--inner)]'
+                      )}
+                    >
+                      {range.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Stats Preview */}
+              {stats && <StatsPreview stats={stats} entries={entries} />}
             </motion.div>
 
             {/* PDF Options (only for PDF format) */}
@@ -433,13 +431,13 @@ export default function ReportsPage() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
-                className="space-y-4"
+                className="card-primary p-5 space-y-4"
               >
-                <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                  <Info className="w-5 h-5 text-green-400" />
+                <h2 className="text-lg font-semibold text-[var(--text-primary)] flex items-center gap-2">
+                  <Info className="w-5 h-5 text-[var(--text-secondary)]" />
                   Report Options
                 </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="card-soft p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
                   <OptionToggle
                     icon={BookOpen}
                     label="Journal Entries"
@@ -484,10 +482,10 @@ export default function ReportsPage() {
                 onClick={handleExport}
                 disabled={isExporting || (entries.length === 0 && !dass21Data)}
                 className={cn(
-                  'w-full md:w-auto px-8 py-3 text-lg font-semibold rounded-xl transition-all',
+                  'w-full md:w-auto px-8 py-3 text-lg font-semibold rounded-full transition-all text-white',
                   exportSuccess
-                    ? 'bg-green-500 hover:bg-green-600'
-                    : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:opacity-90'
+                    ? 'bg-[#7A9B5E] hover:bg-[#6c8b54]'
+                    : 'bg-[var(--accent)] hover:bg-[var(--accent-dark)]'
                 )}
               >
                 {isExporting ? (
@@ -508,7 +506,7 @@ export default function ReportsPage() {
                 )}
               </Button>
               
-              <p className="text-sm text-gray-500 mt-3">
+              <p className="text-sm text-[var(--text-secondary)] mt-3">
                 {selectedFormat === 'pdf' && 'PDF report includes visual summaries and is best for sharing with healthcare providers.'}
                 {selectedFormat === 'json' && 'JSON export contains complete data structure and is best for backup or data migration.'}
                 {selectedFormat === 'csv' && 'CSV export can be opened in Excel or Google Sheets for custom analysis.'}
