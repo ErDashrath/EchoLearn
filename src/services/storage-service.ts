@@ -303,9 +303,14 @@ class StorageStore {
 
       const resolvedItems: Array<{ key: string; value: T }> = [];
       for (const item of resolvedEntries) {
-        const value = await this.resolveStoredValue<T>(item.value);
-        if (value !== null) {
-          resolvedItems.push({ key: item.key, value });
+        try {
+          const value = await this.resolveStoredValue<T>(item.value);
+          if (value !== null) {
+            resolvedItems.push({ key: item.key, value });
+          }
+        } catch (error) {
+          // Skip undecryptable/corrupt entries instead of failing the entire store load.
+          console.warn(`Storage getAll skipped entry [${this.storeName}:${item.key}]`, error);
         }
       }
 
