@@ -10,7 +10,7 @@
  * @module components/layout/AppLayout
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation } from 'wouter';
 import { useAuth } from '@/contexts/AuthContext';
@@ -31,6 +31,14 @@ import {
   LogOut,
   Plus,
   MoreHorizontal,
+  PanelLeftClose,
+  PanelLeftOpen,
+  MessageSquare,
+  BookOpen,
+  Mic,
+  LayoutDashboard,
+  FileText,
+  ClipboardList,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -38,16 +46,17 @@ interface NavItem {
   id: string;
   label: string;
   href: string;
+  icon: React.ComponentType<{ className?: string }>;
   badge?: string;
 }
 
 const navItems: NavItem[] = [
-  { id: 'chat', label: 'Companion', href: '/' },
-  { id: 'journal', label: 'Journal', href: '/journal' },
-  { id: 'voice', label: 'Voice', href: '/voice' },
-  { id: 'dashboard', label: 'Dashboard', href: '/dashboard' },
-  { id: 'reports', label: 'Reports', href: '/reports' },
-  { id: 'assessment', label: 'Check-in', href: '/assessment' },
+  { id: 'chat', label: 'Companion', href: '/', icon: MessageSquare },
+  { id: 'journal', label: 'Journal', href: '/journal', icon: BookOpen },
+  { id: 'voice', label: 'Voice', href: '/voice', icon: Mic },
+  { id: 'dashboard', label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { id: 'reports', label: 'Reports', href: '/reports', icon: FileText },
+  { id: 'assessment', label: 'Check-in', href: '/assessment', icon: ClipboardList },
 ];
 
 interface AppLayoutProps {
@@ -86,6 +95,24 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const isActive = (href: string) => {
     if (href === '/') return location === '/';
     return location.startsWith(href);
+  };
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const saved = window.localStorage.getItem('mindscribe.sidebar.open');
+    if (saved !== null) {
+      setSidebarOpen(saved === 'true');
+    }
+  }, []);
+
+  const toggleSidebar = () => {
+    setSidebarOpen((prev) => {
+      const next = !prev;
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('mindscribe.sidebar.open', String(next));
+      }
+      return next;
+    });
   };
 
   return (
@@ -265,6 +292,20 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
               </motion.span>
             )}
           </AnimatePresence>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleSidebar}
+            className={cn(
+              'ml-auto h-8 w-8 text-[var(--text-secondary)] hover:bg-[var(--inner)] hover:text-[var(--text-primary)]',
+              !sidebarOpen && 'mx-auto'
+            )}
+            aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+            title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+          >
+            {sidebarOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
+          </Button>
         </div>
 
         {/* Navigation */}
@@ -283,8 +324,9 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                 <button
                   type="button"
                   onClick={() => handleNavClick(item.href)}
-                  className="font-medium text-left"
+                  className="font-medium text-left inline-flex items-center"
                 >
+                  <item.icon className="h-4 w-4 mr-2" />
                   {item.label}
                 </button>
                 <div className="flex items-center gap-1">
@@ -311,12 +353,13 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                 key={item.id}
                 onClick={() => handleNavClick(item.href)}
                 className={cn(
-                  'w-full px-3 py-3 rounded-[10px] text-left transition-colors duration-200 group relative',
+                  'w-full px-3 py-3 rounded-[10px] transition-colors duration-200 group relative inline-flex items-center',
                   isActive(item.href)
                     ? 'bg-[var(--inner)] text-[var(--accent)] font-medium'
                     : 'text-[var(--text-secondary)] hover:bg-[var(--inner)]/70 hover:text-[var(--text-primary)]'
                 )}
               >
+                <item.icon className={cn('h-4 w-4 flex-shrink-0', sidebarOpen ? 'mr-2' : 'mx-auto')} />
                 <AnimatePresence>
                   {sidebarOpen && (
                     <motion.span

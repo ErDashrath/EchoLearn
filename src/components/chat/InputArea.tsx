@@ -1,8 +1,7 @@
 import { useState, useRef } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { VoiceControls } from "./VoiceControls";
-import { Send, Mic, MicOff } from "lucide-react";
+import { Send } from "lucide-react";
 
 interface InputAreaProps {
   onSendMessage: (message: string) => void;
@@ -22,8 +21,6 @@ export function InputArea({
   onDraftChange
 }: InputAreaProps) {
   const [message, setMessage] = useState("");
-  const [showVoiceControls, setShowVoiceControls] = useState(false);  
-  const [isListening, setIsListening] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const controlled = typeof draftMessage === "string";
   const currentMessage = controlled ? draftMessage : message;
@@ -62,44 +59,9 @@ export function InputArea({
     }
   };
 
-  const handleVoiceClick = () => {
-    setIsListening(!isListening);
-    setShowVoiceControls(!showVoiceControls);
-  };
-
-  const handleVoiceTranscript = (transcript: string) => {
-    if (transcript.trim()) {
-      onSendMessage(transcript.trim());
-    }
-    setShowVoiceControls(false);
-    setIsListening(false);
-  };
-
   if (isWelcomeScreen) {
     return (
       <div className="w-full max-w-2xl mx-auto">
-        {/* Voice Button */}
-        <div className="flex justify-center mb-6">
-          <motion.div
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-          >
-            <Button
-              size="lg"
-              onClick={handleVoiceClick}
-              className={`w-14 h-14 rounded-full bg-[var(--inner)] hover:bg-[var(--card)] text-[var(--text-secondary)] shadow-sm transition-colors duration-200 ${
-                isListening ? 'bg-[var(--card)] text-[var(--text-primary)]' : ''
-              }`}
-            >
-              {isListening ? (
-                <MicOff className="h-6 w-6" />
-              ) : (
-                <Mic className="h-6 w-6" />
-              )}
-            </Button>
-          </motion.div>
-        </div>
-
         {/* Input Container */}
         <div className="relative bg-[var(--card)] rounded-[20px] border border-[rgba(216,122,67,0.2)] shadow-[0_4px_20px_rgba(0,0,0,0.05)] overflow-hidden focus-within:border-[var(--accent)] transition-colors duration-200">
           <div className="flex items-end p-4 gap-3">
@@ -127,17 +89,6 @@ export function InputArea({
             </div>
           </div>
         </div>
-
-        {/* Voice Controls */}
-        <VoiceControls
-          onTranscript={handleVoiceTranscript}
-          onTextUpdate={(text) => updateMessage(text)}
-          isVisible={showVoiceControls}
-          onVisibilityChange={(visible) => {
-            setShowVoiceControls(visible);
-            if (!visible) setIsListening(false);
-          }}
-        />
       </div>
     );
   }
@@ -161,17 +112,6 @@ export function InputArea({
         
         <div className="flex items-center gap-1">
           <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleVoiceClick}
-            className={`text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--card)] rounded-full w-8 h-8 p-0 transition-colors duration-200 ${
-              isListening ? 'text-[var(--text-primary)]' : ''
-            }`}
-          >
-            {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-          </Button>
-          
-          <Button
             onClick={handleSend}
             disabled={!currentMessage.trim() || disabled}
             className="bg-[var(--accent)] hover:bg-[var(--accent-dark)] text-white rounded-full w-8 h-8 p-0 disabled:opacity-50 transition-colors duration-200"
@@ -180,17 +120,6 @@ export function InputArea({
           </Button>
         </div>
       </div>
-
-      {/* Voice Controls */}
-      <VoiceControls
-        onTranscript={handleVoiceTranscript}
-        onTextUpdate={(text) => updateMessage(text)}
-        isVisible={showVoiceControls}
-        onVisibilityChange={(visible) => {
-          setShowVoiceControls(visible);
-          if (!visible) setIsListening(false);
-        }}
-      />
     </div>
   );
 }
