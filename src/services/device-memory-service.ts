@@ -66,6 +66,8 @@ interface ExtractedFact {
 const CACHE_TTL_MS = 2500;
 const MAX_JOURNAL_CHUNK_CHARS = 560;
 const JOURNAL_CHUNK_OVERLAP_CHARS = 72;
+const MIN_JOURNAL_CHUNK_CHARS = 120;
+const CHUNK_SENTENCE_OVERLAP = 1;
 const MAX_CONTEXT_CHARS = 2200;
 const EMOTION_TERMS = [
   "anxiety",
@@ -351,6 +353,15 @@ class DeviceMemoryService {
 
     const content = this.normalizeWhitespace(message.content);
     if (!content) {
+      return;
+    }
+
+    // Keep memory focused on durable context; skip generic filler.
+    if (message.role === "user" && !this.shouldStoreUserMemory(content)) {
+      return;
+    }
+
+    if (message.role === "assistant" && !this.shouldStoreAssistantMemory(content)) {
       return;
     }
 
@@ -773,6 +784,80 @@ class DeviceMemoryService {
     });
   }
 
+  private shouldStoreAssistantMemory(content: string): boolean {
+    if (content.length < 48) {
+      return false;
+    }
+
+    const lower = content.toLowerCase();
+    const genericPatterns = [
+      /^hello[!.\s]/,
+      /^hi[!.\s]/,
+      /how can i assist you today\??$/,
+      /i'm here for support/,
+      /how are you/,
+    ];
+
+    if (genericPatterns.some((pattern) => pattern.test(lower))) {
+      return false;
+    }
+
+    const informationalSignals = [
+      /\b(plan|steps|strategy|because|therefore|based on|you mentioned|last time|remember)\b/,
+      /\b\d+\b/,
+      /\b(journal|stress|anxiety|pattern|goal)\b/,
+    ];
+
+    return informationalSignals.some((pattern) => pattern.test(lower));
+  }
+
+  private shouldStoreUserMemory(content: string): boolean {
+    const normalized = this.normalizeWhitespace(content);
+    if (!normalized) {
+      return false;
+    }
+
+    // Always preserve extracted durable facts (names/relations/etc.).
+    if (this.extractDurableFacts(normalized).length > 0) {
+      return true;
+    }
+
+    const lower = normalized.toLowerCase();
+    const words = lower.split(/\s+/).filter(Boolean);
+    const uniqueWords = new Set(words);
+
+    // Ignore very short low-signal chatter.
+    if (words.length <= 3 && normalized.length < 24) {
+      const tinyChatter = /^(hi|hello|hey|yo|sup|hii+|he+llo+|ok|okay|kk|hmm|hmmm|lol|lmao|thanks|thank you)$/;
+      if (tinyChatter.test(lower)) {
+        return false;
+      }
+    }
+
+    const highSignalPatterns = [
+      /\b(i am|i'm|my|for me|about me|i feel|i need|i want|i plan|i will|i decided|i learned)\b/,
+      /\b(today|yesterday|tomorrow|last week|this week|recently|lately|since)\b/,
+      /\b(work|job|college|school|exam|deadline|project|family|friend|relationship|health)\b/,
+      /\b(stress|anxiety|panic|overwhelmed|sad|depressed|angry|burnout|lonely|worried)\b/,
+      /\b(goal|habit|routine|progress|improve|problem|issue|struggle)\b/,
+      /\b(remember|remind|before|earlier|previous|last time)\b/,
+      /\d{1,2}[:/]\d{1,2}|\b\d+\b/,
+    ];
+
+    if (highSignalPatterns.some((pattern) => pattern.test(lower))) {
+      return true;
+    }
+
+    // Keep non-trivial statements that are not repetitive noise.
+    const hasReasonableLength = normalized.length >= 42 || words.length >= 8;
+    const lexicalDiversity = uniqueWords.size / Math.max(1, words.length);
+    if (hasReasonableLength && lexicalDiversity >= 0.45) {
+      return true;
+    }
+
+    return false;
+  }
+
   private extractDurableFacts(text: string): ExtractedFact[] {
     const factDefinitions: Array<{ relation: string; relationLabel: string; patterns: RegExp[] }> = [
       {
@@ -903,85 +988,178 @@ class DeviceMemoryService {
   }
 
   private splitIntoChunks(content: string): string[] {
-    const normalized = this.normalizeWhitespace(content);
-    if (!normalized) {
+    const raw = content.trim();
+    if (!raw) {
       return [];
     }
 
+    const normalized = this.normalizeWhitespace(raw);
     if (normalized.length <= MAX_JOURNAL_CHUNK_CHARS) {
       return [normalized];
     }
 
-    const chunks: string[] = [];
-    const paragraphs = normalized
-      .split(/\n+/)
+    const paragraphs = raw
+      .split(/\n{2,}/)
       .map((paragraph) => paragraph.trim())
       .filter(Boolean);
 
-    let current = "";
+    const rawChunks: string[] = [];
 
-    const pushCurrent = () => {
-      const value = current.trim();
-      if (value) {
-        chunks.push(value);
+    for (const paragraph of paragraphs.length ? paragraphs : [raw]) {
+      const paragraphText = this.normalizeWhitespace(paragraph);
+      if (!paragraphText) {
+        continue;
       }
-      current = "";
-    };
 
-    for (const paragraph of paragraphs.length ? paragraphs : [normalized]) {
-      if (paragraph.length > MAX_JOURNAL_CHUNK_CHARS) {
-        const sentences = paragraph.match(/[^.!?]+[.!?]*/g)?.map((item) => item.trim()) ?? [paragraph];
-        for (const sentence of sentences) {
-          if (!current) {
-            current = sentence;
-            continue;
-          }
+      if (paragraphText.length <= MAX_JOURNAL_CHUNK_CHARS) {
+        rawChunks.push(paragraphText);
+        continue;
+      }
 
-          if (`${current} ${sentence}`.length <= MAX_JOURNAL_CHUNK_CHARS) {
-            current = `${current} ${sentence}`;
-          } else {
-            pushCurrent();
-            current = sentence;
-          }
+      const paragraphSentences = this.tokenizeSentences(paragraphText);
+      if (!paragraphSentences.length) {
+        rawChunks.push(...this.splitLongSegment(paragraphText, MAX_JOURNAL_CHUNK_CHARS));
+        continue;
+      }
+
+      let currentChunk = "";
+      for (const sentence of paragraphSentences) {
+        const normalizedSentence = this.normalizeWhitespace(sentence);
+        if (!normalizedSentence) {
+          continue;
         }
+
+        if (normalizedSentence.length > MAX_JOURNAL_CHUNK_CHARS) {
+          const pieces = this.splitLongSegment(normalizedSentence, MAX_JOURNAL_CHUNK_CHARS);
+          for (const piece of pieces) {
+            if (!currentChunk) {
+              currentChunk = piece;
+              continue;
+            }
+
+            if (`${currentChunk} ${piece}`.length <= MAX_JOURNAL_CHUNK_CHARS) {
+              currentChunk = `${currentChunk} ${piece}`;
+            } else {
+              rawChunks.push(currentChunk);
+              currentChunk = piece;
+            }
+          }
+          continue;
+        }
+
+        if (!currentChunk) {
+          currentChunk = normalizedSentence;
+          continue;
+        }
+
+        if (`${currentChunk} ${normalizedSentence}`.length <= MAX_JOURNAL_CHUNK_CHARS) {
+          currentChunk = `${currentChunk} ${normalizedSentence}`;
+        } else {
+          rawChunks.push(currentChunk);
+          currentChunk = normalizedSentence;
+        }
+      }
+
+      if (currentChunk) {
+        rawChunks.push(currentChunk);
+      }
+    }
+
+    if (!rawChunks.length) {
+      return [];
+    }
+
+    const mergedChunks: string[] = [];
+    for (const chunk of rawChunks) {
+      const normalizedChunk = this.normalizeWhitespace(chunk);
+      if (!normalizedChunk) {
         continue;
       }
 
-      if (!current) {
-        current = paragraph;
-        continue;
-      }
-
-      if (`${current}\n${paragraph}`.length <= MAX_JOURNAL_CHUNK_CHARS) {
-        current = `${current}\n${paragraph}`;
+      if (
+        mergedChunks.length > 0
+        && normalizedChunk.length < MIN_JOURNAL_CHUNK_CHARS
+        && `${mergedChunks[mergedChunks.length - 1]} ${normalizedChunk}`.length <= MAX_JOURNAL_CHUNK_CHARS
+      ) {
+        mergedChunks[mergedChunks.length - 1] = `${mergedChunks[mergedChunks.length - 1]} ${normalizedChunk}`;
       } else {
-        pushCurrent();
-        current = paragraph;
+        mergedChunks.push(normalizedChunk);
       }
     }
 
-    pushCurrent();
-
-    if (chunks.length <= 1) {
-      return chunks;
+    if (mergedChunks.length <= 1) {
+      return mergedChunks;
     }
 
-    // Add lightweight overlap so adjacent chunks preserve narrative continuity.
-    return chunks.map((chunk, index) => {
+    const withOverlap = mergedChunks.map((chunk, index) => {
       if (index === 0) {
         return chunk;
       }
 
-      const previousTail = chunks[index - 1].slice(-JOURNAL_CHUNK_OVERLAP_CHARS).trim();
-      if (!previousTail) {
+      const previous = mergedChunks[index - 1];
+      const overlapPrefix = this.extractSentenceOverlap(previous, CHUNK_SENTENCE_OVERLAP);
+      if (!overlapPrefix) {
         return chunk;
       }
 
-      const combined = `${previousTail} ${chunk}`.trim();
-      return combined.length <= MAX_JOURNAL_CHUNK_CHARS
-        ? combined
-        : combined.slice(0, MAX_JOURNAL_CHUNK_CHARS).trimEnd();
+      const combined = `${overlapPrefix} ${chunk}`.trim();
+      if (combined.length <= MAX_JOURNAL_CHUNK_CHARS) {
+        return combined;
+      }
+
+      return combined.slice(0, MAX_JOURNAL_CHUNK_CHARS).trimEnd();
     });
+
+    return Array.from(new Set(withOverlap));
+  }
+
+  private tokenizeSentences(text: string): string[] {
+    const matches = text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) ?? [];
+    return matches.map((sentence) => this.normalizeWhitespace(sentence)).filter(Boolean);
+  }
+
+  private splitLongSegment(text: string, maxChars: number): string[] {
+    const compact = this.normalizeWhitespace(text);
+    if (!compact) {
+      return [];
+    }
+
+    if (compact.length <= maxChars) {
+      return [compact];
+    }
+
+    const words = compact.split(/\s+/).filter(Boolean);
+    const pieces: string[] = [];
+    let current = "";
+
+    for (const word of words) {
+      if (!current) {
+        current = word;
+        continue;
+      }
+
+      if (`${current} ${word}`.length <= maxChars) {
+        current = `${current} ${word}`;
+      } else {
+        pieces.push(current);
+        current = word;
+      }
+    }
+
+    if (current) {
+      pieces.push(current);
+    }
+
+    return pieces;
+  }
+
+  private extractSentenceOverlap(text: string, sentenceCount: number): string {
+    const sentences = this.tokenizeSentences(text);
+    if (!sentences.length) {
+      return this.normalizeWhitespace(text.slice(-JOURNAL_CHUNK_OVERLAP_CHARS));
+    }
+
+    return sentences.slice(-Math.max(1, sentenceCount)).join(" ").trim();
   }
 
   private classifyIntent(query: string): MemoryIntent {
