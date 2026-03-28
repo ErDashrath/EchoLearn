@@ -1,0 +1,65 @@
+flowchart TB
+  U[User on Local Device]
+
+  subgraph BOUNDARY[Secure Client Browser Boundary]
+    direction TB
+
+    subgraph L1[Layer 1 - Presentation Layer]
+      P1[React UI Pages]
+      P2[Interactive Components]
+    end
+
+    subgraph L2[Layer 2 - Application Core]
+      A1[Hooks and Session Orchestration]
+      A2[Service Orchestrators]
+      A3[Prompt and Context Control]
+    end
+
+    subgraph L3[Layer 3 - Local AI Inference]
+      AI1[Whisper STT]
+      AI2[WebLLM Llama 3.2]
+      AI3[Piper TTS]
+      AI4[WebGPU and WASM Acceleration]
+    end
+
+    subgraph L4[Layer 4 - Hardware Abstraction]
+      H1[Web APIs]
+      H2[Tauri Invoke Bridge]
+      H3[Rust Native Commands]
+    end
+
+    subgraph L5[Layer 5 - Secure Storage]
+      S1[Encrypted Storage Service]
+      S2[Device Memory Store]
+      S3[Vector Index Store]
+      S4[IndexedDB and Local File Databases]
+    end
+  end
+
+  CLOUD[Cloud or Remote Server]
+
+  U --> P1
+  P1 --> P2
+  P2 --> A1
+  A1 --> A2
+  A2 --> A3
+  A3 --> AI1
+  A3 --> AI2
+  A3 --> AI3
+  AI1 --> AI4
+  AI2 --> AI4
+  AI3 --> AI4
+  A2 --> H1
+  A2 --> H2
+  H2 --> H3
+  A2 --> S1
+  S1 --> S2
+  S1 --> S3
+  S1 --> S4
+
+  CLOUD -. "No user data leaves device" .- BOUNDARY
+
+  classDef layer fill:#f7f7ff,stroke:#4b4b6a,stroke-width:1px;
+  classDef boundary fill:#eef7ff,stroke:#1f5a9a,stroke-width:2px;
+  class L1,L2,L3,L4,L5 layer;
+  class BOUNDARY boundary;

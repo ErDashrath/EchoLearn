@@ -9,6 +9,7 @@
 
 import { webllmService } from './webllm-service';
 import { deviceMemoryService } from './device-memory-service';
+import { mentalHealthPromptService } from './mental-health-prompt-service';
 import { storageService } from './storage-service';
 
 // =============================================================================
@@ -302,30 +303,7 @@ class JournalService {
 
     console.log('🧠 Analyzing journal entry...');
 
-    const prompt = `Analyze this journal entry for mental health insights. Respond in JSON format only.
-
-Journal Entry:
-"""
-${entry.content}
-"""
-
-Analyze and respond with this exact JSON structure:
-{
-  "mood": "positive" | "neutral" | "negative" | "mixed",
-  "moodScore": <number between -1 and 1, where -1 is very negative, 0 is neutral, 1 is very positive>,
-  "sentimentScore": <same as moodScore, number between -1 and 1>,
-  "emotions": ["emotion1", "emotion2", "emotion3"],
-  "stressLevel": "low" | "moderate" | "high" | "severe",
-  "stressScore": <number between 0 and 10>,
-  "themes": ["theme1", "theme2"],
-  "summary": "<one sentence summary of emotional state>",
-  "suggestions": ["suggestion1", "suggestion2"]
-}
-
-Important: moodScore and sentimentScore should reflect the emotional tone. Negative entries should have scores closer to -1, positive entries closer to 1.
-Do not default to 0 for reflective entries. If the entry shows noticeable hope, relief, gratitude, progress, or productive focus, sentimentScore should usually be above 0.15. If the entry shows noticeable distress, hopelessness, panic, or overwhelm, sentimentScore should usually be below -0.15.
-
-Respond with ONLY the JSON, no other text.`;
+    const prompt = mentalHealthPromptService.buildJournalAnalysisPrompt(entry.content);
 
     try {
       let response = '';

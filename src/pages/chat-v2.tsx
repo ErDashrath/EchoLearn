@@ -61,7 +61,7 @@ export default function ChatPage() {
     stopGeneration,
     messagesEndRef,
   } = usePersistentChat({
-    userName: user?.name || user?.username,
+    userName: user?.username || user?.name,
     dass21Results,
   });
 

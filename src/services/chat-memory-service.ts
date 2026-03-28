@@ -193,6 +193,35 @@ class ChatMemoryService {
     }
   }
 
+  /**
+   * Delete all sessions for a user.
+   */
+  async deleteAllUserSessions(userId: string): Promise<number> {
+    if (!userId) {
+      return 0;
+    }
+
+    try {
+      const sessions = await this.getUserSessions(userId);
+      if (!sessions.length) {
+        return 0;
+      }
+
+      let deleted = 0;
+      for (const session of sessions) {
+        const removed = await this.deleteSession(session.id);
+        if (removed) {
+          deleted++;
+        }
+      }
+
+      return deleted;
+    } catch (error) {
+      console.error('Failed to delete all user sessions:', error);
+      return 0;
+    }
+  }
+
   // ===========================================================================
   // MESSAGE MANAGEMENT
   // ===========================================================================

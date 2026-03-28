@@ -1,0 +1,57 @@
+{
+  "kValues": [3, 5],
+  "queries": [
+    {
+      "id": "q1",
+      "query": "What is my best friend's name?",
+      "relevantIds": ["fact-best-friend", "journal-friend-memory"]
+    },
+    {
+      "id": "q2",
+      "query": "How was my stress pattern this week?",
+      "relevantIds": ["journal-weekly-stress", "summary-week-pattern"]
+    }
+  ],
+  "runs": [
+    {
+      "name": "phase1-baseline",
+      "queryId": "q1",
+      "candidates": [
+        { "id": "chat-greeting", "score": 0.80 },
+        { "id": "fact-best-friend", "score": 0.73 },
+        { "id": "journal-friend-memory", "score": 0.60 },
+        { "id": "summary-week-pattern", "score": 0.40 }
+      ]
+    },
+    {
+      "name": "phase2-rerank",
+      "queryId": "q1",
+      "candidates": [
+        { "id": "fact-best-friend", "score": 0.91 },
+        { "id": "journal-friend-memory", "score": 0.82 },
+        { "id": "chat-greeting", "score": 0.44 },
+        { "id": "summary-week-pattern", "score": 0.28 }
+      ]
+    },
+    {
+      "name": "phase1-baseline",
+      "queryId": "q2",
+      "candidates": [
+        { "id": "chat-greeting", "score": 0.79 },
+        { "id": "summary-week-pattern", "score": 0.69 },
+        { "id": "journal-weekly-stress", "score": 0.56 },
+        { "id": "fact-best-friend", "score": 0.31 }
+      ]
+    },
+    {
+      "name": "phase2-rerank",
+      "queryId": "q2",
+      "candidates": [
+        { "id": "journal-weekly-stress", "score": 0.88 },
+        { "id": "summary-week-pattern", "score": 0.81 },
+        { "id": "chat-greeting", "score": 0.35 },
+        { "id": "fact-best-friend", "score": 0.22 }
+      ]
+    }
+  ]
+}

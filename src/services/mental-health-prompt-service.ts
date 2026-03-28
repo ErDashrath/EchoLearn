@@ -45,11 +45,26 @@ export interface PromptContext {
   timeOfDay?: 'morning' | 'afternoon' | 'evening' | 'night';
 }
 
+export interface PromptCompositionOptions {
+  context: PromptContext;
+  userMessage?: string;
+  retrievedMemoryPrompt?: string;
+  extraContextSections?: string[];
+  addConversationalContinuity?: boolean;
+  forceCasualCompanionMode?: boolean;
+  includeCrisisAugment?: boolean;
+}
+
 // =============================================================================
 // PROMPT TEMPLATES
 // =============================================================================
 
 const BASE_THERAPIST_PROMPT = `You are MindScribe: a warm, friend-like mental health companion.
+
+Main moto:
+- Privacy-first support (local-first, no unnecessary data exposure).
+- Warm and practical support over clinical or robotic tone.
+- Consistency across chat, voice, and journaling.
 
 Rules:
 - Be empathetic, non-judgmental, and human.
@@ -61,6 +76,27 @@ Rules:
 - Invite, do not command. Ask before giving advice.
 - Do not diagnose or replace professionals.
 - If crisis/self-harm signals appear, switch to safety-first support and crisis resources.`;
+
+const CONVERSATIONAL_CONTINUITY_GUIDELINES = `## Conversational style
+- Talk like a warm, supportive friend.
+- Keep flow natural and continuous across turns.
+- Reference relevant past details naturally when helpful.
+- Avoid rigid scripted therapy language unless requested.
+- Vary sentence openers and closings; avoid repeating stock phrasing.
+- In casual moments, one light playful line is okay when safe and respectful.
+- When user seems stuck, ask one gentle CBT-style question (thought, feeling, action).`;
+
+const CASUAL_COMPANION_GUIDELINES = `## Casual companion mode
+- Reply naturally like normal conversation.
+- Keep responses short and clear.
+- Match the user's intent directly.
+- For greetings/small talk, greet casually.
+- Do not force therapy framing unless user asks or distress is clear.`;
+
+const VOICE_STYLE_GUIDELINES = `## Voice style
+- Keep responses short (usually 1-3 sentences).
+- Use a calm, soothing, practical tone.
+- Avoid over-explaining.`;
 
 const SEVERITY_PROMPTS: Record<string, Record<string, string>> = {
   depression: {
@@ -172,6 +208,10 @@ const CRISIS_KEYWORDS = [
 // =============================================================================
 
 class MentalHealthPromptService {
+  getAppMoto(): string {
+    return 'MindScribe is a privacy-first, warm, practical mental health companion that stays consistent across chat, voice, and journaling.';
+  }
+
   /**
    * Generate a personalized system prompt based on DASS-21 results
    */
@@ -208,6 +248,88 @@ If the user expresses thoughts of self-harm or suicide:
 5. Remind them that help is available and things can get better`;
 
     return prompt;
+  }
+
+  composePrompt(options: PromptCompositionOptions): string {
+    const {
+      context,
+      userMessage,
+      retrievedMemoryPrompt,
+      extraContextSections = [],
+      addConversationalContinuity = false,
+      forceCasualCompanionMode = false,
+      includeCrisisAugment,
+    } = options;
+
+    let prompt = this.generateSystemPrompt(context);
+
+    if (context.sessionType === 'voice') {
+      prompt += `\n\n${VOICE_STYLE_GUIDELINES}`;
+    }
+
+    if (forceCasualCompanionMode) {
+      prompt += `\n\n${CASUAL_COMPANION_GUIDELINES}`;
+    }
+
+    if (addConversationalContinuity) {
+      prompt += `\n\n${CONVERSATIONAL_CONTINUITY_GUIDELINES}`;
+    }
+
+    if (retrievedMemoryPrompt?.trim()) {
+      prompt += `\n\n${retrievedMemoryPrompt.trim()}`;
+    }
+
+    for (const section of extraContextSections) {
+      if (section?.trim()) {
+        prompt += `\n\n${section.trim()}`;
+      }
+    }
+
+    const shouldAddCrisisAugment = typeof includeCrisisAugment === 'boolean'
+      ? includeCrisisAugment
+      : (userMessage ? this.containsCrisisSignals(userMessage) : false);
+
+    if (shouldAddCrisisAugment) {
+      prompt += this.getCrisisResponseAddition();
+    }
+
+    return prompt;
+  }
+
+  buildJournalAnalysisPrompt(entryContent: string): string {
+    return `You are MindScribe's private on-device journal analysis assistant.
+
+Main moto:
+- Keep analysis emotionally accurate, practical, and non-judgmental.
+- Do not over-pathologize normal reflection.
+
+Task:
+Analyze this journal entry for mental health insights. Respond in JSON format only.
+
+Journal Entry:
+"""
+${entryContent}
+"""
+
+Analyze and respond with this exact JSON structure:
+{
+  "mood": "positive" | "neutral" | "negative" | "mixed",
+  "moodScore": <number between -1 and 1, where -1 is very negative, 0 is neutral, 1 is very positive>,
+  "sentimentScore": <same as moodScore, number between -1 and 1>,
+  "emotions": ["emotion1", "emotion2", "emotion3"],
+  "stressLevel": "low" | "moderate" | "high" | "severe",
+  "stressScore": <number between 0 and 10>,
+  "themes": ["theme1", "theme2"],
+  "summary": "<one sentence summary of emotional state>",
+  "suggestions": ["suggestion1", "suggestion2"]
+}
+
+Important:
+- moodScore and sentimentScore must reflect tone; avoid defaulting to 0.
+- If the entry has noticeable hope, relief, gratitude, progress, or productive focus, sentimentScore is usually > 0.15.
+- If the entry has noticeable distress, hopelessness, panic, or overwhelm, sentimentScore is usually < -0.15.
+
+Respond with ONLY JSON, no extra text.`;
   }
 
   /**
@@ -278,7 +400,10 @@ If the user expresses thoughts of self-harm or suicide:
     - Ask one good question at a time.
     - Blend empathy with practical next steps.
     - Vary phrasing and endings; avoid repetitive patterns.
-    - Default to friendly chat, not scripted therapy.`,
+    - Default to friendly chat, not scripted therapy.
+    - If user is casual, respond like a friend first, therapist second.
+    - Use gentle humor only when context is clearly safe.
+    - Avoid these repetitive closers: "How can I assist you today?", "Please clarify your query."`,
       
       journal: `\n\n## Journal Reflection Guidelines:
     - Reflect key feelings/themes from the entry.

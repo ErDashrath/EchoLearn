@@ -1,0 +1,55 @@
+{
+  "checks": [
+    {
+      "id": "prompt-service-main-moto",
+      "file": "src/services/mental-health-prompt-service.ts",
+      "contains": [
+        "Main moto:",
+        "privacy-first"
+      ]
+    },
+    {
+      "id": "prompt-service-compose-api",
+      "file": "src/services/mental-health-prompt-service.ts",
+      "regex": [
+        "composePrompt\\s*\\(",
+        "buildJournalAnalysisPrompt\\s*\\("
+      ]
+    },
+    {
+      "id": "persistent-chat-uses-compose",
+      "file": "src/hooks/use-persistent-chat.ts",
+      "contains": [
+        "mentalHealthPromptService.composePrompt("
+      ]
+    },
+    {
+      "id": "chat-hook-uses-compose",
+      "file": "src/hooks/use-chat.tsx",
+      "contains": [
+        "mentalHealthPromptService.composePrompt("
+      ]
+    },
+    {
+      "id": "voice-page-uses-compose",
+      "file": "src/pages/voice.tsx",
+      "contains": [
+        "mentalHealthPromptService.composePrompt("
+      ]
+    },
+    {
+      "id": "journal-uses-central-analysis-prompt",
+      "file": "src/services/journal-service.ts",
+      "contains": [
+        "mentalHealthPromptService.buildJournalAnalysisPrompt("
+      ]
+    },
+    {
+      "id": "voice-no-hardcoded-old-system-prompt",
+      "file": "src/pages/voice.tsx",
+      "notContains": [
+        "You are MindScribe, a friendly voice companion."
+      ]
+    }
+  ]
+}

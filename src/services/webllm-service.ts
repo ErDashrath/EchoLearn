@@ -29,6 +29,15 @@ export interface WebLLMGenerationConfig {
   topP: number;
 }
 
+export type InferenceProfile = 'balanced' | 'turbo';
+
+const INFERENCE_PROFILE_KEY = 'mindscribe.inference.profile';
+
+interface GenerationConfigOverrides {
+  task?: 'chat' | 'summary' | 'voice';
+  modelId?: string | null;
+}
+
 class WebLLMService {
   private engine: any = null;
   private webllm: any = null;
@@ -42,6 +51,7 @@ class WebLLMService {
   private progressCallback: ((progress: WebLLMProgress) => void) | null = null;
   private stopCallback: (() => void) | null = null;
   private isGenerating = false;
+  private inferenceProfile: InferenceProfile = 'balanced';
 
   private models: WebLLMModel[] = [
     {
@@ -100,6 +110,68 @@ class WebLLMService {
     
     // Restore active model from localStorage
     this.restoreActiveModel();
+    this.restoreInferenceProfile();
+  }
+
+  private restoreInferenceProfile() {
+    const stored = localStorage.getItem(INFERENCE_PROFILE_KEY);
+    if (stored === 'turbo' || stored === 'balanced') {
+      this.inferenceProfile = stored;
+    }
+  }
+
+  getInferenceProfile(): InferenceProfile {
+    return this.inferenceProfile;
+  }
+
+  setInferenceProfile(profile: InferenceProfile): void {
+    this.inferenceProfile = profile;
+    localStorage.setItem(INFERENCE_PROFILE_KEY, profile);
+  }
+
+  isTurboModeEnabled(): boolean {
+    return this.inferenceProfile === 'turbo';
+  }
+
+  getFastModelRecommendations(): WebLLMModel[] {
+    return [...this.models]
+      .filter((model) => /q4/i.test(model.id))
+      .sort((left, right) => left.sizeGB - right.sizeGB)
+      .slice(0, 3);
+  }
+
+  getFastestCachedModelId(): string | null {
+    const cached = new Set(this.getCachedModels());
+    const fastest = this.getFastModelRecommendations().find((model) => cached.has(model.id));
+    return fastest?.id ?? null;
+  }
+
+  getOptimizedGenerationConfig(
+    base: WebLLMGenerationConfig,
+    overrides: GenerationConfigOverrides = {},
+  ): WebLLMGenerationConfig {
+    const profile = this.inferenceProfile;
+    const modelId = overrides.modelId ?? this.currentModel ?? this.activeModel;
+    const task = overrides.task ?? 'chat';
+
+    if (profile !== 'turbo') {
+      return base;
+    }
+
+    const isSmallModel = !!modelId && /(0\.5b|1b|1\.5b|2b)/i.test(modelId);
+    const fastTokenCap = task === 'summary'
+      ? 180
+      : task === 'voice'
+        ? 96
+        : isSmallModel
+          ? 220
+          : 256;
+
+    return {
+      temperature: Math.min(base.temperature, 0.6),
+      maxTokens: Math.min(base.maxTokens, fastTokenCap),
+      topP: Math.min(base.topP, 0.88),
+    };
   }
 
   private restoreActiveModel() {

@@ -12,8 +12,51 @@ permissions:
   contents: read
 
 jobs:
+  rag-quality-gate:
+    name: RAG Quality Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Run RAG evaluation quality gate
+        run: npm run eval:rag:gate
+
+  prompt-quality-gate:
+    name: Prompt Quality Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Run prompt quality gate
+        run: npm run eval:prompt:gate
+
   build-windows:
     name: Build Windows Installer
+    needs: [rag-quality-gate, prompt-quality-gate]
     runs-on: windows-latest
     timeout-minutes: 90
     env:

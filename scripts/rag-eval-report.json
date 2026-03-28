@@ -1,0 +1,84 @@
+{
+  "generatedAt": "2026-03-28T21:47:23.812Z",
+  "inputPath": "C:\\Users\\Dashrath\\Desktop\\Academic\\Projects\\MajorProject\\EchoLearn\\scripts\\rag-eval-sample.json",
+  "kValues": [
+    3,
+    5
+  ],
+  "reports": [
+    {
+      "summary": {
+        "runName": "phase1-baseline",
+        "queryCount": 2,
+        "MRR": 0.5,
+        "nDCG@3": 0.6934264036172708,
+        "Recall@3": 1,
+        "nDCG@5": 0.6934264036172708,
+        "Recall@5": 1
+      },
+      "rows": [
+        {
+          "queryId": "q1",
+          "rr": 0.5,
+          "ndcg": {
+            "nDCG@3": 0.6934264036172708,
+            "nDCG@5": 0.6934264036172708
+          },
+          "recall": {
+            "Recall@3": 1,
+            "Recall@5": 1
+          }
+        },
+        {
+          "queryId": "q2",
+          "rr": 0.5,
+          "ndcg": {
+            "nDCG@3": 0.6934264036172708,
+            "nDCG@5": 0.6934264036172708
+          },
+          "recall": {
+            "Recall@3": 1,
+            "Recall@5": 1
+          }
+        }
+      ]
+    },
+    {
+      "summary": {
+        "runName": "phase2-rerank",
+        "queryCount": 2,
+        "MRR": 1,
+        "nDCG@3": 1,
+        "Recall@3": 1,
+        "nDCG@5": 1,
+        "Recall@5": 1
+      },
+      "rows": [
+        {
+          "queryId": "q1",
+          "rr": 1,
+          "ndcg": {
+            "nDCG@3": 1,
+            "nDCG@5": 1
+          },
+          "recall": {
+            "Recall@3": 1,
+            "Recall@5": 1
+          }
+        },
+        {
+          "queryId": "q2",
+          "rr": 1,
+          "ndcg": {
+            "nDCG@3": 1,
+            "nDCG@5": 1
+          },
+          "recall": {
+            "Recall@3": 1,
+            "Recall@5": 1
+          }
+        }
+      ]
+    }
+  ]
+}

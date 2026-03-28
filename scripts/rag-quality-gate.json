@@ -1,0 +1,16 @@
+{
+  "required": {
+    "MRR": 0.0,
+    "Recall@3": 0.0,
+    "Recall@5": 0.0,
+    "nDCG@3": 0.0,
+    "nDCG@5": 0.0
+  },
+  "maxRegression": {
+    "MRR": 0.02,
+    "Recall@3": 0.02,
+    "Recall@5": 0.02,
+    "nDCG@3": 0.02,
+    "nDCG@5": 0.02
+  }
+}

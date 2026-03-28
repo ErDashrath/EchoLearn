@@ -1,0 +1,73 @@
+flowchart TB
+  %% =========================
+  %% EchoLearn Overall Architecture
+  %% =========================
+
+  U[End User]
+
+  subgraph L1[Presentation Layer]
+    UI1[React Pages\nChat, Voice, Journal, Dashboard, Reports]
+    UI2[Reusable Components\nInputArea, ChatArea, AppLayout]
+  end
+
+  subgraph L2[Application Orchestration Layer]
+    H1[Hooks\nuse-persistent-chat\nuse-voice\nuse-chat-session]
+    S1[Service Orchestrators\nchat-memory-service\njournal-service\nvoice-service]
+    S2[Prompt/Control Services\nmental-health-prompt-service\napi-config]
+  end
+
+  subgraph L3[AI Inference Layer]
+    A1[WebLLM Service\nLocal LLM Inference]
+    A2[Voice Inference Control\nWeb Speech / Whisper / Piper]
+    A3[Native Tauri Voice Commands\nRust bridge for STT/TTS]
+  end
+
+  subgraph L4[RAG and Memory Layer]
+    R1[Device Memory Service\nIngestion, Filtering, Retrieval Fusion]
+    R2[Vector Memory Service\nEmbeddings, Vector Index, Semantic Search]
+    R3[Context Builder\nSectioned Prompt Assembly]
+  end
+
+  subgraph L5[Persistence Layer]
+    P1[Storage Service\nEncrypted/Plain App Stores]
+    P2[Device Store\nKV + Vector Index State]
+    P3[Memory Store\nMemoryRecord Database]
+    P4[LocalForage Fallback\nBrowser Runtime]
+  end
+
+  subgraph L6[Desktop Runtime]
+    T1[Tauri Rust Core]
+    T2[device_store commands]
+    T3[memory_store commands]
+    T4[voice_native commands]
+  end
+
+  U --> UI1
+  UI1 --> UI2
+  UI2 --> H1
+  H1 --> S1
+  H1 --> S2
+
+  S1 --> A1
+  S1 --> A2
+  A2 --> A3
+
+  S1 --> R1
+  R1 --> R2
+  R1 --> R3
+  R3 --> A1
+
+  R1 --> P3
+  R2 --> P2
+  S1 --> P1
+  P1 --> P4
+
+  A3 --> T4
+  P2 --> T2
+  P3 --> T3
+  T1 --- T2
+  T1 --- T3
+  T1 --- T4
+
+  classDef layer fill:#f8f8ff,stroke:#555,stroke-width:1px;
+  class L1,L2,L3,L4,L5,L6 layer;

@@ -64,7 +64,7 @@ export default function ChatPage() {
     stopWebLLMGeneration,
     exportSession,
   } = useChat(undefined, {
-    userName: user?.name || user?.username,
+    userName: user?.username || user?.name,
     dass21Results
   });
 
@@ -128,7 +128,7 @@ export default function ChatPage() {
   };
   // F009: Get personalized greeting
   const getPersonalizedGreeting = () => {
-    const name = user?.name || user?.username || '';
+    const name = user?.username || user?.name || '';
     const hour = new Date().getHours();
     let greeting = 'Hello';
     if (hour >= 5 && hour < 12) greeting = 'Good morning';

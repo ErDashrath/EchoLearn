@@ -1,0 +1,19 @@
+flowchart LR
+  I1[User Audio Input]
+  STT[Whisper STT\nWebGPU or WASM]
+  C1[Context Manager\nRAG Retrieval plus Prompt Assembly]
+  LLM[WebLLM Llama 3.2\nToken Generation]
+  TTS[Piper TTS\nWASM or Native]
+  O1[Audio Output]
+
+  I1 --> STT
+  STT --> C1
+  C1 --> LLM
+  LLM --> TTS
+  TTS --> O1
+
+  R1[Memory Store and Vector Index] --> C1
+  C1 --> R1
+
+  classDef proc fill:#f8fff8,stroke:#2f6f3e,stroke-width:1px;
+  class STT,C1,LLM,TTS proc;

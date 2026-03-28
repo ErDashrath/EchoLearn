@@ -1,0 +1,20 @@
+flowchart LR
+  PWD[User Password]
+  SALT[Per-User Salt]
+  KDF[PBKDF2\n100000 iterations\nSHA-256]
+  KEY[Derived 256-bit AES Key]
+  DATA[Journal and Sensitive Payload]
+  ENC[AES-GCM Encryptor\nRandom IV per record]
+  CIPH[Ciphertext plus IV]
+  STORE[IndexedDB or Local Device Store]
+
+  PWD --> KDF
+  SALT --> KDF
+  KDF --> KEY
+  KEY --> ENC
+  DATA --> ENC
+  ENC --> CIPH
+  CIPH --> STORE
+
+  classDef crypto fill:#fff8f3,stroke:#8a4b1e,stroke-width:1px;
+  class KDF,KEY,ENC,CIPH crypto;

@@ -310,23 +310,24 @@ export function useChat(sessionId?: string, mentalHealthContext?: MentalHealthCo
         maxTokens: 512,
         topP: 0.9
       };
-
-      // F009: Generate personalized system prompt based on DASS-21 results
-      const systemPrompt = mentalHealthPromptService.generateSystemPrompt({
-        userName: mentalHealthContext?.userName,
-        dass21Results: mentalHealthContext?.dass21Results,
-        sessionType: 'chat',
-        timeOfDay: mentalHealthPromptService.getTimeOfDay()
+      const optimizedConfig = webllmService.getOptimizedGenerationConfig(config, {
+        task: 'chat',
+        modelId: selectedModel,
       });
 
-      // Check for crisis signals and add crisis protocol if needed
-      const hasCrisisSignals = mentalHealthPromptService.containsCrisisSignals(content);
-      const finalSystemPrompt = hasCrisisSignals 
-        ? systemPrompt + mentalHealthPromptService.getCrisisResponseAddition()
-        : systemPrompt;
+      const finalSystemPrompt = mentalHealthPromptService.composePrompt({
+        context: {
+          userName: mentalHealthContext?.userName,
+          dass21Results: mentalHealthContext?.dass21Results,
+          sessionType: 'chat',
+          timeOfDay: mentalHealthPromptService.getTimeOfDay(),
+        },
+        userMessage: content,
+        addConversationalContinuity: true,
+      });
 
       // Stream the response with personalized prompt
-      for await (const chunk of webllmService.generateResponse(conversationHistory, config, finalSystemPrompt)) {
+      for await (const chunk of webllmService.generateResponse(conversationHistory, optimizedConfig, finalSystemPrompt)) {
         responseContent += chunk;
         
         // Update the message content in real-time

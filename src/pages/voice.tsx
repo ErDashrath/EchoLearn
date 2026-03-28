@@ -192,6 +192,7 @@ const VoiceTherapyPage: React.FC = () => {
   const activeRequestIdRef = useRef(0);
   const continuousRestartTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const silenceSubmitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastAutoSubmittedTranscriptRef = useRef('');
   const autoRearmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const AUTO_REARM_RETRY_MS = 450;
 
@@ -408,34 +409,17 @@ const VoiceTherapyPage: React.FC = () => {
             limit: 6,
           })
         : { prompt: '', items: [] };
-      const retrievedMemoryAddition = retrievedContext.prompt
-        ? `\n\n${retrievedContext.prompt}`
-        : '';
 
-      let systemPrompt = '';
-      if (distressMode) {
-        systemPrompt = mentalHealthPromptService.generateSystemPrompt({
+      const systemPrompt = mentalHealthPromptService.composePrompt({
+        context: {
+          userName: user?.username || user?.name,
           dass21Results,
           sessionType: 'voice',
-        });
-        systemPrompt += `\n\nIMPORTANT VOICE STYLE:
-        - Keep responses short (2-3 sentences max).
-        - Speak in a calm, soothing tone.
-        - Be empathetic and practical.
-        - Do not over-explain.`;
-        systemPrompt += retrievedMemoryAddition;
-      } else {
-        systemPrompt = `You are MindScribe, a friendly voice companion.
-
-        Rules:
-        - Reply naturally like normal conversation.
-        - Keep replies short (1-2 sentences).
-        - Match the user's intent directly.
-        - For greetings/small talk, greet casually.
-        - Do NOT mention therapy, assessments, coping techniques, or mental health unless the user explicitly asks.
-        - Avoid assumptions about the user's emotional state.`;
-        systemPrompt += retrievedMemoryAddition;
-      }
+        },
+        userMessage: userText,
+        retrievedMemoryPrompt: retrievedContext.prompt,
+        forceCasualCompanionMode: !distressMode,
+      });
 
       // Generate AI response using webllmService async generator
       let aiResponse = directMemoryAnswer || quickReply || '';
@@ -447,9 +431,12 @@ const VoiceTherapyPage: React.FC = () => {
 
         const generator = webllmService.generateResponse(
           [...recentConversationHistory, { role: 'user', content: userText }],
-          distressMode
+          webllmService.getOptimizedGenerationConfig(
+            distressMode
             ? { maxTokens: 80, temperature: 0.55, topP: 0.9 }
             : { maxTokens: 56, temperature: 0.7, topP: 0.92 },
+            { task: 'voice' },
+          ),
           systemPrompt
         );
 
@@ -473,7 +460,7 @@ const VoiceTherapyPage: React.FC = () => {
       setConversation(prev => [...prev, { role: 'ai', text: aiResponse }]);
 
       // Speak the response
-      await speak(aiResponse, { speed, pitch: 0.9 });
+      await speak(aiResponse);
 
       // If continuous hands-free session is active, request mic re-arm after speaking.
       if (continuousMode && continuousSessionActive && !stopRequestedRef.current) {
@@ -500,7 +487,7 @@ const VoiceTherapyPage: React.FC = () => {
     if (isListening) {
       const finalTranscript = await stopListening();
       if (finalTranscript.trim()) {
-        processUserSpeech(finalTranscript);
+        await processUserSpeech(finalTranscript);
       }
     } else if (!isSpeaking && !isProcessing && !isTranscribing) {
       await startListening();
@@ -608,7 +595,7 @@ const VoiceTherapyPage: React.FC = () => {
 
   // Auto-submit after 1.5s silence in continuous mode
   useEffect(() => {
-    if (!continuousMode || !isListening || isProcessing || isSpeaking) {
+    if (!continuousMode || !continuousSessionActive || isProcessing || isSpeaking) {
       if (silenceSubmitTimeoutRef.current) {
         clearTimeout(silenceSubmitTimeoutRef.current);
         silenceSubmitTimeoutRef.current = null;
@@ -616,7 +603,15 @@ const VoiceTherapyPage: React.FC = () => {
       return;
     }
 
-    if (!transcript.trim()) return;
+    const trimmedTranscript = transcript.trim();
+    if (!trimmedTranscript) {
+      lastAutoSubmittedTranscriptRef.current = '';
+      return;
+    }
+
+    if (lastAutoSubmittedTranscriptRef.current === trimmedTranscript) {
+      return;
+    }
 
     if (silenceSubmitTimeoutRef.current) {
       clearTimeout(silenceSubmitTimeoutRef.current);
@@ -625,13 +620,21 @@ const VoiceTherapyPage: React.FC = () => {
     silenceSubmitTimeoutRef.current = setTimeout(async () => {
       if (stopRequestedRef.current || !continuousMode) return;
 
-      const finalTranscript = await stopListening();
-      if (finalTranscript.trim()) {
-        processUserSpeech(finalTranscript);
+      const candidateTranscript = isListening
+        ? await stopListening()
+        : trimmedTranscript;
+
+      const finalTranscript = candidateTranscript.trim();
+      if (finalTranscript && lastAutoSubmittedTranscriptRef.current !== finalTranscript) {
+        lastAutoSubmittedTranscriptRef.current = finalTranscript;
+        await processUserSpeech(finalTranscript);
       } else {
-        startListening();
+        lastAutoSubmittedTranscriptRef.current = '';
+        if (!isListening && !isTranscribing && !isProcessing && !isSpeaking) {
+          await startListening();
+        }
       }
-    }, 1500);
+    }, isListening ? 1500 : 150);
 
     return () => {
       if (silenceSubmitTimeoutRef.current) {
@@ -639,7 +642,18 @@ const VoiceTherapyPage: React.FC = () => {
         silenceSubmitTimeoutRef.current = null;
       }
     };
-  }, [continuousMode, isListening, isProcessing, isSpeaking, transcript, stopListening, startListening, processUserSpeech]);
+  }, [
+    continuousMode,
+    continuousSessionActive,
+    isListening,
+    isProcessing,
+    isSpeaking,
+    isTranscribing,
+    transcript,
+    stopListening,
+    startListening,
+    processUserSpeech,
+  ]);
 
   useEffect(() => {
     return () => {

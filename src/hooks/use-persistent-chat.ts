@@ -27,6 +27,65 @@ import { webllmService, type WebLLMGenerationConfig } from '@/services/webllm-se
 import { mentalHealthPromptService, type DASS21Results } from '@/services/mental-health-prompt-service';
 import { ttsService } from '@/lib/tts-service';
 
+const GENERIC_REPLY_PATTERNS: RegExp[] = [
+  /i\s*(am|'m)\s*sorry[^.!?]*didn'?t understand/i,
+  /what can i assist you with today\??/i,
+  /could you please clarify/i,
+  /it seems like we have some confusion/i,
+  /can i support you better\??/i,
+];
+
+const normalizeForCompare = (text: string): string =>
+  text
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/[^a-z0-9\s]/g, '')
+    .trim();
+
+const isLowQualityReply = (
+  reply: string,
+  userInput: string,
+  recentMessages: ChatMessage[],
+): boolean => {
+  const trimmed = reply.trim();
+  if (!trimmed) {
+    return true;
+  }
+
+  if (GENERIC_REPLY_PATTERNS.some((pattern) => pattern.test(trimmed))) {
+    return true;
+  }
+
+  const normalizedReply = normalizeForCompare(trimmed);
+  if (normalizedReply.length < 24) {
+    return true;
+  }
+
+  const normalizedInput = normalizeForCompare(userInput);
+  if (normalizedInput && normalizedReply === normalizedInput) {
+    return true;
+  }
+
+  const lastAssistant = [...recentMessages]
+    .reverse()
+    .find((message) => message.role === 'assistant')?.content;
+
+  if (lastAssistant && normalizeForCompare(lastAssistant) === normalizedReply) {
+    return true;
+  }
+
+  return false;
+};
+
+const buildRecoveryPrompt = (basePrompt: string): string => `${basePrompt}
+
+## Immediate response correction
+- Your previous draft was too generic or repetitive.
+- Reply naturally like a friend: warm, specific, and useful.
+- Include one reflective CBT-style question only when helpful.
+- No stock phrases like "How can I assist you today?" or "Please clarify your query."
+- If the user is casual, a light playful line is okay when respectful.`;
+
 // =============================================================================
 // TYPES
 // =============================================================================
@@ -82,6 +141,7 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
   const { userName, dass21Results } = options;
   const { user } = useAuth();
   const { toast } = useToast();
+  const resolvedUserName = userName || user?.username;
 
   // Session state
   const [session, setSession] = useState<ChatSession | null>(null);
@@ -366,17 +426,6 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
         });
       });
 
-      // Generate personalized system prompt
-      const systemPrompt = mentalHealthPromptService.generateSystemPrompt({
-        userName,
-        dass21Results,
-        sessionType: 'chat',
-        timeOfDay: mentalHealthPromptService.getTimeOfDay(),
-      });
-
-      const memorySystemAddition = memory.contextPrompt
-        ? `\n\n${memory.contextPrompt}`
-        : '';
       const retrievedContext = user?.username
         ? await deviceMemoryService.buildContextForTurn({
             userId: user.username,
@@ -384,28 +433,30 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
             sessionId: currentSession.id,
             recentMessages: memory.recentMessages,
             limit: 10,
+            modelContextTokens: 4096,
+            reservedResponseTokens: 768,
+            charsPerToken: 4,
+            enableSemantic: true,
+            enableReranker: true,
+            enableTelemetry: true,
           })
         : { prompt: '', items: [] };
-      const retrievedMemoryAddition = retrievedContext.prompt
-        ? `\n\n${retrievedContext.prompt}`
-        : '';
-      const conversationalContinuityAddition = `
 
-## Conversational style
-- Talk like a warm, supportive friend.
-- Keep the flow natural and continuous across messages.
-- Reference relevant past details naturally when helpful.
-- Avoid robotic CBT-style templates unless the user explicitly asks for structured exercises.`;
-
-      // Check for crisis signals
-      const hasCrisisSignals = mentalHealthPromptService.containsCrisisSignals(content);
-      const finalSystemPrompt = hasCrisisSignals
-        ? systemPrompt
-            + memorySystemAddition
-            + retrievedMemoryAddition
-            + conversationalContinuityAddition
-            + mentalHealthPromptService.getCrisisResponseAddition()
-        : systemPrompt + memorySystemAddition + retrievedMemoryAddition + conversationalContinuityAddition;
+      if (retrievedContext.telemetry && import.meta.env.DEV) {
+        console.debug('RAG retrieval telemetry', retrievedContext.telemetry);
+      }
+      const finalSystemPrompt = mentalHealthPromptService.composePrompt({
+        context: {
+          userName: resolvedUserName,
+          dass21Results,
+          sessionType: 'chat',
+          timeOfDay: mentalHealthPromptService.getTimeOfDay(),
+        },
+        userMessage: content,
+        retrievedMemoryPrompt: retrievedContext.prompt,
+        extraContextSections: memory.contextPrompt ? [memory.contextPrompt] : [],
+        addConversationalContinuity: true,
+      });
 
       // Config for generation
       const config: WebLLMGenerationConfig = {
@@ -413,6 +464,10 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
         maxTokens: 512,
         topP: 0.9,
       };
+      const optimizedConfig = webllmService.getOptimizedGenerationConfig(config, {
+        task: 'chat',
+        modelId: selectedModel,
+      });
 
       // Create placeholder for AI message
       const aiMessagePlaceholder: ChatMessage = {
@@ -430,7 +485,7 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
       let responseContent = '';
       for await (const chunk of webllmService.generateResponse(
         conversationHistory,
-        config,
+        optimizedConfig,
         finalSystemPrompt
       )) {
         responseContent += chunk;
@@ -442,6 +497,46 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
         }];
         setSession(prev => prev ? { ...prev, messages: updatedMessages } : null);
         scrollToBottom();
+      }
+
+      const shouldRetryForQuality = isLowQualityReply(
+        responseContent,
+        content,
+        memory.recentMessages,
+      );
+
+      if (shouldRetryForQuality) {
+        if (import.meta.env.DEV) {
+          console.debug('Retrying assistant response due to low-quality generic output');
+        }
+
+        responseContent = '';
+        const retryPrompt = buildRecoveryPrompt(finalSystemPrompt);
+        const retryConfig: WebLLMGenerationConfig = {
+          ...optimizedConfig,
+          temperature: Math.min(1, (optimizedConfig.temperature ?? 0.7) + 0.12),
+          topP: Math.min(1, (optimizedConfig.topP ?? 0.9) + 0.05),
+        };
+
+        for await (const chunk of webllmService.generateResponse(
+          conversationHistory,
+          retryConfig,
+          retryPrompt,
+        )) {
+          responseContent += chunk;
+
+          const updatedMessages = [...currentSession.messages, {
+            ...aiMessagePlaceholder,
+            content: responseContent,
+          }];
+          setSession(prev => prev ? { ...prev, messages: updatedMessages } : null);
+          scrollToBottom();
+        }
+      }
+
+      responseContent = responseContent.trim();
+      if (!responseContent) {
+        responseContent = 'Got you. Tell me one detail about what happened, and we will figure it out together.';
       }
 
       // Save the final AI message
@@ -496,7 +591,7 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
       setIsGenerating(false);
       abortControllerRef.current = null;
     }
-  }, [session, user?.username, selectedModel, userName, dass21Results, ttsEnabled, toast, scrollToBottom]);
+  }, [session, user?.username, selectedModel, resolvedUserName, dass21Results, ttsEnabled, toast, scrollToBottom]);
 
   // ===========================================================================
   // SUMMARIZATION
@@ -535,11 +630,15 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
         maxTokens: 300,
         topP: 0.9,
       };
+      const optimizedConfig = webllmService.getOptimizedGenerationConfig(config, {
+        task: 'summary',
+        modelId: selectedModel,
+      });
 
       let summaryResponse = '';
       for await (const chunk of webllmService.generateResponse(
         [{ role: 'user', content: summaryPrompt }],
-        config
+        optimizedConfig
       )) {
         summaryResponse += chunk;
       }

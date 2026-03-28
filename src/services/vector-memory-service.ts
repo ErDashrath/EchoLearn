@@ -397,6 +397,20 @@ class VectorMemoryService {
     await this.saveIndex(userId, index);
   }
 
+  async clearUserIndex(userId: string): Promise<void> {
+    if (!userId) {
+      return;
+    }
+
+    this.indexCache.delete(userId);
+    const keysToDelete = Array.from(this.queryEmbeddingCache.keys()).filter((key) => key.startsWith(`${userId}::`));
+    for (const key of keysToDelete) {
+      this.queryEmbeddingCache.delete(key);
+    }
+
+    await deviceStoreService.delete(VECTOR_STORE_NAME, userId);
+  }
+
   async search(userId: string, query: string, options: VectorSearchOptions = {}): Promise<VectorSearchResult[]> {
     if (!userId) {
       return [];
