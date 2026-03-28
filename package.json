@@ -6,7 +6,12 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:tauri": "vite build && node scripts/slim-tauri-dist.js",
     "preview": "vite preview",
+    "eval:rag": "node scripts/evaluate-rag.js",
+    "eval:rag:report": "node scripts/evaluate-rag.js --input scripts/rag-eval-sample.json --out scripts/rag-eval-report.json",
+    "eval:rag:gate": "node scripts/evaluate-rag-gate.js --input scripts/rag-eval-sample.json --config scripts/rag-quality-gate.json --baseline phase1-baseline --candidate phase2-rerank",
+    "eval:prompt:gate": "node scripts/evaluate-prompt-gate.js --config scripts/prompt-quality-gate.json",
     "download:voice-models": "node scripts/download-voice-models.js",
     "postinstall": "node scripts/fix-piper-wasm.js && node scripts/download-voice-models.js"
   },
