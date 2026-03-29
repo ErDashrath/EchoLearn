@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 
 export interface NativeCpuInferenceStatus {
   available: boolean;
@@ -10,6 +11,13 @@ export interface NativeCpuInferenceStatus {
 export interface NativeCpuInferenceOptions {
   maxTokens?: number;
   temperature?: number;
+}
+
+interface NativeCpuStreamEventPayload {
+  requestId: string;
+  chunk: string;
+  done: boolean;
+  error?: string;
 }
 
 class NativeCpuInferenceService {
@@ -47,6 +55,82 @@ class NativeCpuInferenceService {
       maxTokens: options.maxTokens,
       temperature: options.temperature,
     });
+  }
+
+  async *generateStream(
+    prompt: string,
+    options: NativeCpuInferenceOptions = {},
+  ): AsyncGenerator<string, void, unknown> {
+    if (!this.isTauriRuntime()) {
+      throw new Error('Native CPU inference requires desktop runtime (Tauri).');
+    }
+
+    const requestId = `native-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const queue: string[] = [];
+    let done = false;
+    let streamError: Error | null = null;
+    let wake: (() => void) | null = null;
+
+    const notify = () => {
+      if (wake) {
+        const resolver = wake;
+        wake = null;
+        resolver();
+      }
+    };
+
+    const unlisten = await listen<NativeCpuStreamEventPayload>(
+      'native-inference-stream',
+      (event) => {
+        const payload = event.payload;
+        if (!payload || payload.requestId !== requestId) {
+          return;
+        }
+
+        if (payload.chunk) {
+          queue.push(payload.chunk);
+        }
+
+        if (payload.error) {
+          streamError = new Error(payload.error);
+          done = true;
+        } else if (payload.done) {
+          done = true;
+        }
+
+        notify();
+      },
+    );
+
+    try {
+      await invoke<boolean>('native_inference_generate_stream', {
+        requestId,
+        prompt,
+        maxTokens: options.maxTokens,
+        temperature: options.temperature,
+      });
+
+      while (!done || queue.length > 0) {
+        if (queue.length > 0) {
+          yield queue.shift() as string;
+          continue;
+        }
+
+        if (streamError) {
+          throw streamError;
+        }
+
+        await new Promise<void>((resolve) => {
+          wake = resolve;
+        });
+      }
+
+      if (streamError) {
+        throw streamError;
+      }
+    } finally {
+      await unlisten();
+    }
   }
 
   async stop(): Promise<boolean> {

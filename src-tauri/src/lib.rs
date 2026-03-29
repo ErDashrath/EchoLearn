@@ -20,6 +20,7 @@ pub fn run() {
       memory_store::delete_memory_records_by_prefixes,
       native_inference::native_inference_status,
       native_inference::native_inference_generate,
+      native_inference::native_inference_generate_stream,
       native_inference::native_inference_stop,
       voice_native::native_voice_is_available,
       voice_native::native_piper_is_available,

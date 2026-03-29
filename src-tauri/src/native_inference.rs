@@ -1,11 +1,14 @@
 use std::{
   env,
+  io::Read,
   path::PathBuf,
   process::{Command, Stdio},
   sync::{Mutex, OnceLock},
+  thread,
 };
 
 use serde::{Deserialize, Serialize};
+use tauri::Emitter;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -14,6 +17,15 @@ pub struct NativeInferenceStatus {
   pub runtime: String,
   pub model: String,
   pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeInferenceStreamChunk {
+  pub request_id: String,
+  pub chunk: String,
+  pub done: bool,
+  pub error: Option<String>,
 }
 
 static ACTIVE_NATIVE_PID: OnceLock<Mutex<Option<u32>>> = OnceLock::new();
@@ -98,6 +110,23 @@ fn resolve_runtime_command() -> Option<String> {
 
 fn resolve_model_path() -> Option<PathBuf> {
   first_existing_path(&native_model_candidates())
+}
+
+fn emit_stream_chunk(
+  app: &tauri::AppHandle,
+  request_id: &str,
+  chunk: &str,
+  done: bool,
+  error: Option<String>,
+) {
+  let payload = NativeInferenceStreamChunk {
+    request_id: request_id.to_string(),
+    chunk: chunk.to_string(),
+    done,
+    error,
+  };
+
+  let _ = app.emit("native-inference-stream", payload);
 }
 
 #[tauri::command]
@@ -235,6 +264,145 @@ pub fn native_inference_generate(
   }
 
   Ok(text)
+}
+
+#[tauri::command]
+pub fn native_inference_generate_stream(
+  app: tauri::AppHandle,
+  request_id: String,
+  prompt: String,
+  max_tokens: Option<u32>,
+  temperature: Option<f32>,
+) -> Result<bool, String> {
+  if prompt.trim().is_empty() {
+    return Err(String::from("Prompt cannot be empty."));
+  }
+
+  let status = native_inference_status();
+  if !status.available {
+    return Err(status.reason);
+  }
+
+  let runtime = status.runtime;
+  let model = status.model;
+  let max_predict = max_tokens.unwrap_or(256).clamp(16, 2048);
+  let temp = temperature.unwrap_or(0.7).clamp(0.0, 1.5);
+  let threads = env::var("MINDSCRIBE_NATIVE_CPU_THREADS")
+    .ok()
+    .and_then(|value| value.parse::<usize>().ok())
+    .filter(|value| *value > 0)
+    .unwrap_or_else(|| {
+      std::thread::available_parallelism()
+        .map(|value| value.get().min(8))
+        .unwrap_or(4)
+    });
+
+  let mut cmd = Command::new(runtime);
+  cmd
+    .arg("-m")
+    .arg(model)
+    .arg("-p")
+    .arg(prompt)
+    .arg("-n")
+    .arg(max_predict.to_string())
+    .arg("--temp")
+    .arg(format!("{temp:.2}"))
+    .arg("--threads")
+    .arg(threads.to_string())
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped());
+
+  let mut child = cmd
+    .spawn()
+    .map_err(|error| format!("failed to start native CPU runtime: {error}"))?;
+
+  let pid = child.id();
+  {
+    let slot = active_pid_slot();
+    let mut guard = slot
+      .lock()
+      .map_err(|_| String::from("native inference lock poisoned"))?;
+    *guard = Some(pid);
+  }
+
+  let mut stdout = child
+    .stdout
+    .take()
+    .ok_or_else(|| String::from("native CPU runtime stdout was not available"))?;
+  let mut stderr = child
+    .stderr
+    .take()
+    .ok_or_else(|| String::from("native CPU runtime stderr was not available"))?;
+
+  let app_handle = app.clone();
+  thread::spawn(move || {
+    let mut buffer = [0u8; 512];
+
+    loop {
+      match stdout.read(&mut buffer) {
+        Ok(0) => break,
+        Ok(count) => {
+          let chunk = String::from_utf8_lossy(&buffer[..count]).to_string();
+          if !chunk.is_empty() {
+            emit_stream_chunk(&app_handle, &request_id, &chunk, false, None);
+          }
+        }
+        Err(error) => {
+          emit_stream_chunk(
+            &app_handle,
+            &request_id,
+            "",
+            true,
+            Some(format!("native CPU stream read failed: {error}")),
+          );
+          return;
+        }
+      }
+    }
+
+    let mut stderr_text = String::new();
+    let _ = stderr.read_to_string(&mut stderr_text);
+    let wait_result = child.wait();
+
+    {
+      let slot = active_pid_slot();
+      if let Ok(mut guard) = slot.lock() {
+        if guard.as_ref() == Some(&pid) {
+          *guard = None;
+        }
+      }
+    }
+
+    match wait_result {
+      Ok(status) if status.success() => {
+        emit_stream_chunk(&app_handle, &request_id, "", true, None);
+      }
+      Ok(_) => {
+        if stderr_text.trim().is_empty() {
+          emit_stream_chunk(&app_handle, &request_id, "", true, None);
+        } else {
+          emit_stream_chunk(
+            &app_handle,
+            &request_id,
+            "",
+            true,
+            Some(stderr_text.trim().to_string()),
+          );
+        }
+      }
+      Err(error) => {
+        emit_stream_chunk(
+          &app_handle,
+          &request_id,
+          "",
+          true,
+          Some(format!("native CPU runtime wait failed: {error}")),
+        );
+      }
+    }
+  });
+
+  Ok(true)
 }
 
 #[tauri::command]

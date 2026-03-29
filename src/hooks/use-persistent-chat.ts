@@ -529,13 +529,11 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
             .join('\n');
 
           const nativePrompt = `${promptOverride}\n\n${transcript}\nAssistant:`;
-          const nativeResponse = await nativeCpuInferenceService.generate(nativePrompt, {
+          for await (const chunk of nativeCpuInferenceService.generateStream(nativePrompt, {
             maxTokens: generationConfig.maxTokens,
             temperature: generationConfig.temperature,
-          });
-
-          if (nativeResponse?.trim()) {
-            yield nativeResponse;
+          })) {
+            yield chunk;
           }
           return;
         }
