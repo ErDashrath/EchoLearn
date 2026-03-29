@@ -17,22 +17,32 @@
       ]
     },
     {
-      "id": "persistent-chat-uses-compose",
+      "id": "persistent-chat-uses-central-prompt-pipeline",
       "file": "src/hooks/use-persistent-chat.ts",
       "contains": [
-        "mentalHealthPromptService.composePrompt("
+        "composeTurnPrompts(",
+        "getRecommendedContextBudget("
       ]
     },
     {
-      "id": "chat-hook-uses-compose",
+      "id": "chat-hook-uses-central-prompt-pipeline",
       "file": "src/hooks/use-chat.tsx",
       "contains": [
-        "mentalHealthPromptService.composePrompt("
+        "composeTurnPrompts(",
+        "getRecommendedContextBudget("
       ]
     },
     {
-      "id": "voice-page-uses-compose",
+      "id": "voice-page-uses-central-prompt-pipeline",
       "file": "src/pages/voice.tsx",
+      "contains": [
+        "composeTurnPrompts(",
+        "getRecommendedContextBudget("
+      ]
+    },
+    {
+      "id": "llm-prompt-service-delegates-to-mental-health-service",
+      "file": "src/services/llm-prompt-service.ts",
       "contains": [
         "mentalHealthPromptService.composePrompt("
       ]
