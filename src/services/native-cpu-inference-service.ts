@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 export interface NativeCpuInferenceStatus {
   available: boolean;
   runtime: string;
+  model?: string;
   reason: string;
 }
 
