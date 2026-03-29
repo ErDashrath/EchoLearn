@@ -5,6 +5,8 @@ export interface NativeCpuInferenceStatus {
   available: boolean;
   runtime: string;
   model?: string;
+  runtimeSha256?: string;
+  modelSha256?: string;
   reason: string;
 }
 

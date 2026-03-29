@@ -129,3 +129,12 @@ Enable local AI chat on Windows devices that cannot run WebGPU, while preserving
 - Branch: native-cpu
 - This document is the execution baseline.
 - Phase 1 scaffold is started in code alongside this plan.
+
+## Integrity Enforcement (Implemented)
+- Native CPU provider availability now requires SHA-256 verification for:
+  - Runtime binary via `MINDSCRIBE_NATIVE_CPU_RUNTIME_SHA256`
+  - Model artifact via `MINDSCRIBE_NATIVE_CPU_MODEL_SHA256`
+- Optional path overrides:
+  - `MINDSCRIBE_NATIVE_CPU_RUNTIME`
+  - `MINDSCRIBE_NATIVE_CPU_MODEL`
+- If required hashes are missing or mismatched, native provider remains unavailable with explicit reason.

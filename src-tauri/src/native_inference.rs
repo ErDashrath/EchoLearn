@@ -1,13 +1,15 @@
 use std::{
   env,
+  fs::File,
   io::Read,
-  path::PathBuf,
+  path::{Path, PathBuf},
   process::{Command, Stdio},
   sync::{Mutex, OnceLock},
   thread,
 };
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use tauri::Emitter;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -16,6 +18,8 @@ pub struct NativeInferenceStatus {
   pub available: bool,
   pub runtime: String,
   pub model: String,
+  pub runtime_sha256: String,
+  pub model_sha256: String,
   pub reason: String,
 }
 
@@ -44,6 +48,20 @@ fn command_exists_in_path(command: &str) -> bool {
     .output()
     .map(|output| output.status.success())
     .unwrap_or(false)
+}
+
+fn resolve_command_path(command: &str) -> Option<PathBuf> {
+  let output = Command::new("where").arg(command).output().ok()?;
+  if !output.status.success() {
+    return None;
+  }
+
+  let stdout = String::from_utf8_lossy(&output.stdout);
+  stdout
+    .lines()
+    .map(str::trim)
+    .find(|line| !line.is_empty())
+    .map(PathBuf::from)
 }
 
 fn native_runtime_candidates() -> Vec<PathBuf> {
@@ -96,13 +114,13 @@ fn native_model_candidates() -> Vec<PathBuf> {
   candidates
 }
 
-fn resolve_runtime_command() -> Option<String> {
+fn resolve_runtime_command() -> Option<PathBuf> {
   if let Some(path) = first_existing_path(&native_runtime_candidates()) {
-    return Some(path.to_string_lossy().to_string());
+    return Some(path);
   }
 
   if command_exists_in_path("llama-cli.exe") {
-    return Some(String::from("llama-cli.exe"));
+    return resolve_command_path("llama-cli.exe");
   }
 
   None
@@ -110,6 +128,56 @@ fn resolve_runtime_command() -> Option<String> {
 
 fn resolve_model_path() -> Option<PathBuf> {
   first_existing_path(&native_model_candidates())
+}
+
+fn expected_runtime_hash() -> Option<String> {
+  env::var("MINDSCRIBE_NATIVE_CPU_RUNTIME_SHA256")
+    .ok()
+    .map(|value| value.trim().to_lowercase())
+    .filter(|value| !value.is_empty())
+}
+
+fn expected_model_hash() -> Option<String> {
+  env::var("MINDSCRIBE_NATIVE_CPU_MODEL_SHA256")
+    .ok()
+    .map(|value| value.trim().to_lowercase())
+    .filter(|value| !value.is_empty())
+}
+
+fn compute_sha256(path: &Path) -> Result<String, String> {
+  let mut file =
+    File::open(path).map_err(|error| format!("failed to open {}: {error}", path.display()))?;
+  let mut hasher = Sha256::new();
+  let mut buffer = [0u8; 8192];
+
+  loop {
+    let read = file
+      .read(&mut buffer)
+      .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+    if read == 0 {
+      break;
+    }
+    hasher.update(&buffer[..read]);
+  }
+
+  Ok(format!("{:x}", hasher.finalize()))
+}
+
+fn verify_hash(label: &str, actual: &str, expected: Option<String>) -> Result<(), String> {
+  let expected = expected.ok_or_else(|| {
+    format!(
+      "Missing required integrity hash for {label}. Set MINDSCRIBE_NATIVE_CPU_{}_SHA256.",
+      label.to_ascii_uppercase()
+    )
+  })?;
+
+  if actual == expected {
+    return Ok(());
+  }
+
+  Err(format!(
+    "Integrity check failed for {label}. Expected {expected}, got {actual}."
+  ))
 }
 
 fn emit_stream_chunk(
@@ -136,6 +204,8 @@ pub fn native_inference_status() -> NativeInferenceStatus {
       available: false,
       runtime: String::new(),
       model: String::new(),
+        runtime_sha256: String::new(),
+        model_sha256: String::new(),
       reason: String::from("Native CPU inference is currently implemented for Windows only."),
     };
   }
@@ -147,6 +217,8 @@ pub fn native_inference_status() -> NativeInferenceStatus {
         available: false,
         runtime: String::new(),
         model: String::new(),
+        runtime_sha256: String::new(),
+        model_sha256: String::new(),
         reason: String::from(
           "Native CPU runtime binary not found. Configure MINDSCRIBE_NATIVE_CPU_RUNTIME or bundle llama-cli.exe.",
         ),
@@ -159,8 +231,10 @@ pub fn native_inference_status() -> NativeInferenceStatus {
     None => {
       return NativeInferenceStatus {
         available: false,
-        runtime,
+        runtime: runtime.to_string_lossy().to_string(),
         model: String::new(),
+        runtime_sha256: String::new(),
+        model_sha256: String::new(),
         reason: String::from(
           "Native CPU model file not found. Configure MINDSCRIBE_NATIVE_CPU_MODEL or bundle a GGUF model.",
         ),
@@ -168,10 +242,62 @@ pub fn native_inference_status() -> NativeInferenceStatus {
     }
   };
 
+  let runtime_hash = match compute_sha256(&runtime) {
+    Ok(hash) => hash,
+    Err(reason) => {
+      return NativeInferenceStatus {
+        available: false,
+        runtime: runtime.to_string_lossy().to_string(),
+        model: model.to_string_lossy().to_string(),
+        runtime_sha256: String::new(),
+        model_sha256: String::new(),
+        reason,
+      }
+    }
+  };
+
+  let model_hash = match compute_sha256(&model) {
+    Ok(hash) => hash,
+    Err(reason) => {
+      return NativeInferenceStatus {
+        available: false,
+        runtime: runtime.to_string_lossy().to_string(),
+        model: model.to_string_lossy().to_string(),
+        runtime_sha256: runtime_hash,
+        model_sha256: String::new(),
+        reason,
+      }
+    }
+  };
+
+  if let Err(reason) = verify_hash("runtime", &runtime_hash, expected_runtime_hash()) {
+    return NativeInferenceStatus {
+      available: false,
+      runtime: runtime.to_string_lossy().to_string(),
+      model: model.to_string_lossy().to_string(),
+      runtime_sha256: runtime_hash,
+      model_sha256: model_hash,
+      reason,
+    };
+  }
+
+  if let Err(reason) = verify_hash("model", &model_hash, expected_model_hash()) {
+    return NativeInferenceStatus {
+      available: false,
+      runtime: runtime.to_string_lossy().to_string(),
+      model: model.to_string_lossy().to_string(),
+      runtime_sha256: runtime_hash,
+      model_sha256: model_hash,
+      reason,
+    };
+  }
+
   NativeInferenceStatus {
     available: true,
-    runtime,
+    runtime: runtime.to_string_lossy().to_string(),
     model: model.to_string_lossy().to_string(),
+    runtime_sha256: runtime_hash,
+    model_sha256: model_hash,
     reason: String::new(),
   }
 }

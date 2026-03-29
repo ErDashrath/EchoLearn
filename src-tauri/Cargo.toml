@@ -24,6 +24,7 @@ log = "0.4"
 tauri = { version = "2.9.5", features = [] }
 tauri-plugin-log = "2"
 base64 = "0.22"
+sha2 = "0.10"
 
 [profile.release]
 # Lower optimization pressure to avoid LLVM OOM on low-memory machines.
