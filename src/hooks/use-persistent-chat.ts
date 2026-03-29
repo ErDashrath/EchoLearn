@@ -28,6 +28,7 @@ import { mentalHealthPromptService, type DASS21Results } from '@/services/mental
 import {
   inferenceRuntimeService,
   type InferenceProviderId,
+  type InferenceSelectionMode,
   type InferenceRuntimeCapabilities,
 } from '@/services/inference-runtime-service';
 import { nativeCpuInferenceService } from '@/services/native-cpu-inference-service';
@@ -115,6 +116,8 @@ export interface PersistentChatReturn {
   
   // Model state
   selectedModel: string | null;
+  inferenceSelectionMode: InferenceSelectionMode;
+  setInferenceSelectionMode: (mode: InferenceSelectionMode) => void;
   activeInferenceProvider: InferenceProviderId | null;
   inferenceCapabilities: InferenceRuntimeCapabilities | null;
   
@@ -163,6 +166,8 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
 
   // Model state
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
+  const [inferenceSelectionMode, setInferenceSelectionModeState] =
+    useState<InferenceSelectionMode>(() => inferenceRuntimeService.getSelectionMode());
   const [activeInferenceProvider, setActiveInferenceProvider] = useState<InferenceProviderId | null>(null);
   const [inferenceCapabilities, setInferenceCapabilities] =
     useState<InferenceRuntimeCapabilities | null>(null);
@@ -211,8 +216,9 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
         if (!mounted) {
           return;
         }
+        const provider = inferenceRuntimeService.resolveProvider(capabilities, inferenceSelectionMode);
         setInferenceCapabilities(capabilities);
-        setActiveInferenceProvider(capabilities.recommendedProvider);
+        setActiveInferenceProvider(provider);
       } catch (error) {
         if (import.meta.env.DEV) {
           console.debug('Failed to refresh inference capabilities', error);
@@ -227,7 +233,18 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
       mounted = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [inferenceSelectionMode]);
+
+  const setInferenceSelectionMode = useCallback((mode: InferenceSelectionMode) => {
+    inferenceRuntimeService.setSelectionMode(mode);
+    setInferenceSelectionModeState(mode);
+    setActiveInferenceProvider((previous) => {
+      if (!inferenceCapabilities) {
+        return previous;
+      }
+      return inferenceRuntimeService.resolveProvider(inferenceCapabilities, mode);
+    });
+  }, [inferenceCapabilities]);
 
   // ===========================================================================
   // LOAD SESSIONS ON MOUNT
@@ -428,13 +445,18 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
     }
 
     const capabilities = await inferenceRuntimeService.getCapabilities();
+    const selectedProvider = inferenceRuntimeService.resolveProvider(
+      capabilities,
+      inferenceSelectionMode,
+    );
     setInferenceCapabilities(capabilities);
-    setActiveInferenceProvider(capabilities.recommendedProvider);
+    setActiveInferenceProvider(selectedProvider);
 
-    if (!capabilities.recommendedProvider) {
-      const reasons = [capabilities.webgpu.reason, capabilities.nativeCpu.reason]
-        .filter((reason): reason is string => !!reason)
-        .join(' ');
+    if (!selectedProvider) {
+      const reasons = inferenceRuntimeService.getUnavailableReason(
+        capabilities,
+        inferenceSelectionMode,
+      );
 
       toast({
         title: 'Unsupported device/runtime',
@@ -445,7 +467,7 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
     }
 
     if (
-      capabilities.recommendedProvider === 'webllm-webgpu' &&
+      selectedProvider === 'webllm-webgpu' &&
       selectedModel &&
       webllmService.isModelCached(selectedModel) &&
       !webllmService.isModelLoaded()
@@ -523,7 +545,7 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
         promptOverride: string,
         generationConfig: WebLLMGenerationConfig,
       ): AsyncGenerator<string, void, unknown> {
-        if (capabilities.recommendedProvider === 'native-cpu') {
+        if (selectedProvider === 'native-cpu') {
           const transcript = conversationHistory
             .map((message) => `${message.role === 'assistant' ? 'Assistant' : 'User'}: ${message.content}`)
             .join('\n');
@@ -678,7 +700,17 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
       setIsGenerating(false);
       abortControllerRef.current = null;
     }
-  }, [session, user?.username, selectedModel, resolvedUserName, dass21Results, ttsEnabled, toast, scrollToBottom]);
+  }, [
+    session,
+    user?.username,
+    selectedModel,
+    resolvedUserName,
+    dass21Results,
+    ttsEnabled,
+    toast,
+    scrollToBottom,
+    inferenceSelectionMode,
+  ]);
 
   // ===========================================================================
   // SUMMARIZATION
@@ -835,6 +867,8 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
 
     // Model state
     selectedModel,
+    inferenceSelectionMode,
+    setInferenceSelectionMode,
     activeInferenceProvider,
     inferenceCapabilities,
 

@@ -54,6 +54,8 @@ export default function ChatPage() {
     messages,
     isLoading,
     isGenerating,
+    inferenceSelectionMode,
+    setInferenceSelectionMode,
     activeInferenceProvider,
     inferenceCapabilities,
     createNewSession,
@@ -111,11 +113,15 @@ export default function ChatPage() {
       ? 'WebGPU'
       : 'Unavailable';
 
-  const inferenceBlocked = !!inferenceCapabilities && !inferenceCapabilities.recommendedProvider;
+  const inferenceBlocked = !!inferenceCapabilities && !activeInferenceProvider;
   const capabilityReason = inferenceBlocked
-    ? [inferenceCapabilities?.webgpu.reason, inferenceCapabilities?.nativeCpu.reason]
-        .filter((value): value is string => !!value)
-        .join(' ')
+    ? inferenceSelectionMode === 'webllm-webgpu'
+      ? inferenceCapabilities?.webgpu.reason || 'WebGPU provider is unavailable.'
+      : inferenceSelectionMode === 'native-cpu'
+        ? inferenceCapabilities?.nativeCpu.reason || 'Native CPU provider is unavailable.'
+        : [inferenceCapabilities?.webgpu.reason, inferenceCapabilities?.nativeCpu.reason]
+            .filter((value): value is string => !!value)
+            .join(' ')
     : '';
 
   const nativeStatus = inferenceCapabilities?.nativeCpuStatus;
@@ -162,6 +168,41 @@ export default function ChatPage() {
         </div>
 
         <div className="flex items-center space-x-2">
+          <div className="flex items-center rounded-lg border border-[var(--inner)] overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setInferenceSelectionMode('auto')}
+              className={`px-2 py-1 text-xs ${
+                inferenceSelectionMode === 'auto'
+                  ? 'bg-[var(--inner)] text-[var(--text-primary)]'
+                  : 'text-[var(--text-secondary)] hover:bg-[var(--inner)]'
+              }`}
+            >
+              Auto
+            </button>
+            <button
+              type="button"
+              onClick={() => setInferenceSelectionMode('webllm-webgpu')}
+              className={`px-2 py-1 text-xs border-l border-[var(--inner)] ${
+                inferenceSelectionMode === 'webllm-webgpu'
+                  ? 'bg-[var(--inner)] text-[var(--text-primary)]'
+                  : 'text-[var(--text-secondary)] hover:bg-[var(--inner)]'
+              }`}
+            >
+              WebGPU
+            </button>
+            <button
+              type="button"
+              onClick={() => setInferenceSelectionMode('native-cpu')}
+              className={`px-2 py-1 text-xs border-l border-[var(--inner)] ${
+                inferenceSelectionMode === 'native-cpu'
+                  ? 'bg-[var(--inner)] text-[var(--text-primary)]'
+                  : 'text-[var(--text-secondary)] hover:bg-[var(--inner)]'
+              }`}
+            >
+              Native CPU
+            </button>
+          </div>
           <span
             className={`text-xs px-2 py-1 rounded-full border ${
               activeInferenceProvider
@@ -169,7 +210,7 @@ export default function ChatPage() {
                 : 'border-amber-500/30 text-amber-200 bg-amber-500/10'
             }`}
           >
-            Inference: {providerLabel}
+            Inference: {providerLabel} ({inferenceSelectionMode})
           </span>
           <Button
             variant="ghost"

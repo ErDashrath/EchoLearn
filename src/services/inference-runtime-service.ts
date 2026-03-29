@@ -5,6 +5,9 @@ import {
 } from '@/services/native-cpu-inference-service';
 
 export type InferenceProviderId = 'webllm-webgpu' | 'native-cpu';
+export type InferenceSelectionMode = 'auto' | InferenceProviderId;
+
+const INFERENCE_SELECTION_MODE_KEY = 'mindscribe.inference.selection.mode';
 
 export interface ProviderCapability {
   provider: InferenceProviderId;
@@ -21,6 +24,50 @@ export interface InferenceRuntimeCapabilities {
 }
 
 class InferenceRuntimeService {
+  getSelectionMode(): InferenceSelectionMode {
+    const value = localStorage.getItem(INFERENCE_SELECTION_MODE_KEY);
+    if (value === 'webllm-webgpu' || value === 'native-cpu' || value === 'auto') {
+      return value;
+    }
+    return 'auto';
+  }
+
+  setSelectionMode(mode: InferenceSelectionMode): void {
+    localStorage.setItem(INFERENCE_SELECTION_MODE_KEY, mode);
+  }
+
+  resolveProvider(
+    capabilities: InferenceRuntimeCapabilities,
+    mode: InferenceSelectionMode,
+  ): InferenceProviderId | null {
+    if (mode === 'auto') {
+      return capabilities.recommendedProvider;
+    }
+
+    if (mode === 'webllm-webgpu') {
+      return capabilities.webgpu.available ? 'webllm-webgpu' : null;
+    }
+
+    return capabilities.nativeCpu.available ? 'native-cpu' : null;
+  }
+
+  getUnavailableReason(
+    capabilities: InferenceRuntimeCapabilities,
+    mode: InferenceSelectionMode,
+  ): string {
+    if (mode === 'webllm-webgpu') {
+      return capabilities.webgpu.reason || 'WebGPU provider is unavailable.';
+    }
+
+    if (mode === 'native-cpu') {
+      return capabilities.nativeCpu.reason || 'Native CPU provider is unavailable.';
+    }
+
+    return [capabilities.webgpu.reason, capabilities.nativeCpu.reason]
+      .filter((reason): reason is string => !!reason)
+      .join(' ');
+  }
+
   private async detectWebGpuCapability(): Promise<ProviderCapability> {
     const supported = await webllmService.checkWebGPUSupport();
     if (supported) {

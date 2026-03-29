@@ -14,6 +14,7 @@ import { Bot, Volume2, VolumeX, Brain } from "lucide-react";
 import {
   inferenceRuntimeService,
   type InferenceProviderId,
+  type InferenceSelectionMode,
   type InferenceRuntimeCapabilities,
 } from "@/services/inference-runtime-service";
 import type { ChatMode, FocusMode } from "@/types/schema";
@@ -23,6 +24,8 @@ export default function ChatPage() {
   const [showSidebar, setShowSidebar] = useState(false);
   const [showModelPanel, setShowModelPanel] = useState(false);
   const [dass21Results, setDass21Results] = useState<DASS21Results | null>(null);
+  const [inferenceSelectionMode, setInferenceSelectionMode] =
+    useState<InferenceSelectionMode>(() => inferenceRuntimeService.getSelectionMode());
   const [activeInferenceProvider, setActiveInferenceProvider] = useState<InferenceProviderId | null>(null);
   const [inferenceCapabilities, setInferenceCapabilities] =
     useState<InferenceRuntimeCapabilities | null>(null);
@@ -62,8 +65,9 @@ export default function ChatPage() {
         if (!mounted) {
           return;
         }
+        const provider = inferenceRuntimeService.resolveProvider(capabilities, inferenceSelectionMode);
         setInferenceCapabilities(capabilities);
-        setActiveInferenceProvider(capabilities.recommendedProvider);
+        setActiveInferenceProvider(provider);
       } catch {
         if (mounted) {
           setInferenceCapabilities(null);
@@ -79,7 +83,7 @@ export default function ChatPage() {
       mounted = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [inferenceSelectionMode]);
   
   const {
     messages,
@@ -174,17 +178,30 @@ export default function ChatPage() {
     return name ? `${greeting}, ${name}` : greeting;
   };
 
+  const handleInferenceModeChange = (mode: InferenceSelectionMode) => {
+    inferenceRuntimeService.setSelectionMode(mode);
+    setInferenceSelectionMode(mode);
+
+    if (inferenceCapabilities) {
+      setActiveInferenceProvider(inferenceRuntimeService.resolveProvider(inferenceCapabilities, mode));
+    }
+  };
+
   const providerLabel = activeInferenceProvider === 'native-cpu'
     ? 'Native CPU'
     : activeInferenceProvider === 'webllm-webgpu'
       ? 'WebGPU'
       : 'Unavailable';
 
-  const inferenceBlocked = !!inferenceCapabilities && !inferenceCapabilities.recommendedProvider;
+  const inferenceBlocked = !!inferenceCapabilities && !activeInferenceProvider;
   const capabilityReason = inferenceBlocked
-    ? [inferenceCapabilities?.webgpu.reason, inferenceCapabilities?.nativeCpu.reason]
-        .filter((value): value is string => !!value)
-        .join(' ')
+    ? inferenceSelectionMode === 'webllm-webgpu'
+      ? inferenceCapabilities?.webgpu.reason || 'WebGPU provider is unavailable.'
+      : inferenceSelectionMode === 'native-cpu'
+        ? inferenceCapabilities?.nativeCpu.reason || 'Native CPU provider is unavailable.'
+        : [inferenceCapabilities?.webgpu.reason, inferenceCapabilities?.nativeCpu.reason]
+            .filter((value): value is string => !!value)
+            .join(' ')
     : '';
 
   const nativeStatus = inferenceCapabilities?.nativeCpuStatus;
@@ -213,6 +230,41 @@ export default function ChatPage() {
         </div>
         
         <div className="flex items-center space-x-2">
+          <div className="flex items-center rounded-lg border border-gray-700 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => handleInferenceModeChange('auto')}
+              className={`px-2 py-1 text-xs ${
+                inferenceSelectionMode === 'auto'
+                  ? 'bg-gray-700 text-white'
+                  : 'text-gray-300 hover:bg-gray-800'
+              }`}
+            >
+              Auto
+            </button>
+            <button
+              type="button"
+              onClick={() => handleInferenceModeChange('webllm-webgpu')}
+              className={`px-2 py-1 text-xs border-l border-gray-700 ${
+                inferenceSelectionMode === 'webllm-webgpu'
+                  ? 'bg-gray-700 text-white'
+                  : 'text-gray-300 hover:bg-gray-800'
+              }`}
+            >
+              WebGPU
+            </button>
+            <button
+              type="button"
+              onClick={() => handleInferenceModeChange('native-cpu')}
+              className={`px-2 py-1 text-xs border-l border-gray-700 ${
+                inferenceSelectionMode === 'native-cpu'
+                  ? 'bg-gray-700 text-white'
+                  : 'text-gray-300 hover:bg-gray-800'
+              }`}
+            >
+              Native CPU
+            </button>
+          </div>
           <span
             className={`text-xs px-2 py-1 rounded-full border ${
               activeInferenceProvider
@@ -220,7 +272,7 @@ export default function ChatPage() {
                 : 'border-amber-500/30 text-amber-200 bg-amber-500/10'
             }`}
           >
-            Inference: {providerLabel}
+            Inference: {providerLabel} ({inferenceSelectionMode})
           </span>
           {/* Model Download Button - Opens Right Panel */}
           <Button
