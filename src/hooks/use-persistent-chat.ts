@@ -30,6 +30,7 @@ import {
   type InferenceProviderId,
   type InferenceRuntimeCapabilities,
 } from '@/services/inference-runtime-service';
+import { nativeCpuInferenceService } from '@/services/native-cpu-inference-service';
 import { ttsService } from '@/lib/tts-service';
 
 const GENERIC_REPLY_PATTERNS: RegExp[] = [
@@ -443,16 +444,12 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
       return;
     }
 
-    if (capabilities.recommendedProvider !== 'webllm-webgpu') {
-      toast({
-        title: 'Provider not wired yet',
-        description: 'Native CPU provider is detected but not wired into chat generation yet. WebGPU provider is required for now.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (selectedModel && webllmService.isModelCached(selectedModel) && !webllmService.isModelLoaded()) {
+    if (
+      capabilities.recommendedProvider === 'webllm-webgpu' &&
+      selectedModel &&
+      webllmService.isModelCached(selectedModel) &&
+      !webllmService.isModelLoaded()
+    ) {
       try {
         await webllmService.loadModel(selectedModel);
       } catch (error) {
@@ -522,6 +519,36 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
         modelId: selectedModel,
       });
 
+      const generateFromActiveProvider = async function* (
+        promptOverride: string,
+        generationConfig: WebLLMGenerationConfig,
+      ): AsyncGenerator<string, void, unknown> {
+        if (capabilities.recommendedProvider === 'native-cpu') {
+          const transcript = conversationHistory
+            .map((message) => `${message.role === 'assistant' ? 'Assistant' : 'User'}: ${message.content}`)
+            .join('\n');
+
+          const nativePrompt = `${promptOverride}\n\n${transcript}\nAssistant:`;
+          const nativeResponse = await nativeCpuInferenceService.generate(nativePrompt, {
+            maxTokens: generationConfig.maxTokens,
+            temperature: generationConfig.temperature,
+          });
+
+          if (nativeResponse?.trim()) {
+            yield nativeResponse;
+          }
+          return;
+        }
+
+        for await (const chunk of webllmService.generateResponseWithFallback(
+          conversationHistory,
+          generationConfig,
+          promptOverride,
+        )) {
+          yield chunk;
+        }
+      };
+
       // Create placeholder for AI message
       const aiMessagePlaceholder: ChatMessage = {
         id: `ai-${Date.now()}`,
@@ -536,11 +563,7 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
 
       // Stream the response
       let responseContent = '';
-      for await (const chunk of webllmService.generateResponseWithFallback(
-        conversationHistory,
-        optimizedConfig,
-        finalSystemPrompt
-      )) {
+      for await (const chunk of generateFromActiveProvider(finalSystemPrompt, optimizedConfig)) {
         responseContent += chunk;
         
         // Update UI with streaming content
@@ -571,11 +594,7 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
           topP: Math.min(1, (optimizedConfig.topP ?? 0.9) + 0.05),
         };
 
-        for await (const chunk of webllmService.generateResponseWithFallback(
-          conversationHistory,
-          retryConfig,
-          retryPrompt,
-        )) {
+        for await (const chunk of generateFromActiveProvider(retryPrompt, retryConfig)) {
           responseContent += chunk;
 
           const updatedMessages = [...currentSession.messages, {
@@ -739,6 +758,7 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
 
   const stopGeneration = useCallback(() => {
     webllmService.stopGeneration();
+    nativeCpuInferenceService.stop();
     abortControllerRef.current?.abort();
     setIsGenerating(false);
     toast({
