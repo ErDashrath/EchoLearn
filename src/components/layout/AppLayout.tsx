@@ -191,6 +191,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                     item.id === 'chat' ? (
                       <div
                         key={item.id}
+                        data-tour-id="nav-chat"
                         className={cn(
                           'w-full px-4 py-3 rounded-[10px] transition-colors duration-200 flex items-center justify-between gap-2',
                           isActive(item.href)
@@ -227,6 +228,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                     ) : (
                       <button
                         key={item.id}
+                        data-tour-id={`nav-${item.id}`}
                         onClick={() => handleNavClick(item.href)}
                         className={cn(
                           'w-full px-4 py-3 rounded-[10px] text-left transition-colors duration-200',
@@ -250,6 +252,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                 <div className="p-4 border-t border-[var(--inner)]">
                   <Button
                     variant="ghost"
+                    data-tour-id="nav-settings"
                     className="w-full justify-start text-[var(--text-secondary)] hover:bg-[var(--inner)] hover:text-[var(--text-primary)] transition-colors duration-200 mb-2"
                     onClick={() => handleNavClick('/settings')}
                   >
@@ -314,6 +317,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             item.id === 'chat' && sidebarOpen ? (
               <div
                 key={item.id}
+                data-tour-id="nav-chat"
                 className={cn(
                   'w-full px-3 py-3 rounded-[10px] transition-colors duration-200 flex items-center justify-between gap-2',
                   isActive(item.href)
@@ -351,6 +355,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             ) : (
               <button
                 key={item.id}
+                data-tour-id={`nav-${item.id}`}
                 onClick={() => handleNavClick(item.href)}
                 className={cn(
                   'w-full px-3 py-3 rounded-[10px] transition-colors duration-200 group relative inline-flex items-center',
@@ -388,6 +393,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         <div className="p-3 border-t border-[var(--inner)]">
           <Button
             variant="ghost"
+            data-tour-id="nav-settings"
             onClick={() => handleNavClick('/settings')}
             className={cn(
               'w-full mb-2 transition-colors duration-200',

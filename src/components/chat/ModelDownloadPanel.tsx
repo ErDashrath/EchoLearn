@@ -170,7 +170,7 @@ export function ModelDownloadPanel({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[100] flex">
+        <div className="fixed inset-0 z-[170] flex" data-tour-id="model-panel">
           {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
@@ -226,7 +226,7 @@ export function ModelDownloadPanel({
 
               {/* Download Progress */}
               {downloadProgress && (
-                <Card className="border-blue-500/50 bg-blue-900/20">
+                <Card className="border-blue-500/50 bg-blue-900/20" data-tour-id="model-download-progress">
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
@@ -252,7 +252,7 @@ export function ModelDownloadPanel({
               )}
 
               {/* Models List */}
-              <div className="space-y-3">
+              <div className="space-y-3" data-tour-id="model-download-list">
                 <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
                   <Download className="h-4 w-4" />
                   Available Models ({availableModels.length})
@@ -324,6 +324,7 @@ export function ModelDownloadPanel({
                             <Button
                               size="sm"
                               onClick={() => handleModelSelect(model.id)}
+                              data-tour-id="model-select-action"
                               className={isActive 
                                 ? "bg-purple-600 hover:bg-purple-700 text-white" 
                                 : "bg-green-600 hover:bg-green-700 text-white"
@@ -336,6 +337,7 @@ export function ModelDownloadPanel({
                             <Button
                               size="sm"
                               onClick={() => handleModelDownload(model)}
+                              data-tour-id="model-download-action"
                               disabled={!!downloadingModel}
                               className="bg-blue-600 hover:bg-blue-700 text-white"
                             >

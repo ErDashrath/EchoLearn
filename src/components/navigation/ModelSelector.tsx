@@ -150,6 +150,7 @@ export function ModelSelector({
     return (
       <Button
         variant="ghost"
+        data-tour-id="chat-model-selector"
         className="flex items-center space-x-2 h-10 px-3 rounded-lg hover:bg-gray-800 text-gray-300 border border-gray-700 min-w-[160px]"
         onClick={onOpenSidebar}
       >
@@ -166,6 +167,7 @@ export function ModelSelector({
       <div className="relative">
         <Button
           variant="ghost"
+          data-tour-id="chat-model-selector"
           className="flex items-center space-x-2 h-10 px-3 rounded-lg hover:bg-gray-800 text-gray-300 border border-gray-700 min-w-[160px]"
           onClick={() => setIsOpen(!isOpen)}
         >

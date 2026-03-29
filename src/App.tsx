@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { TourProvider } from "@/contexts/TourContext";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import AppLayout from "@/components/layout/AppLayout";
 import LoginPage from "@/pages/login";
@@ -33,21 +34,21 @@ function Router() {
       
       {/* Protected Routes with Layout */}
       <Route path="/">
-        <ProtectedRoute>
+        <ProtectedRoute requireDASS21>
           <AppLayout>
             <ChatPage />
           </AppLayout>
         </ProtectedRoute>
       </Route>
       <Route path="/test">
-        <ProtectedRoute>
+        <ProtectedRoute requireDASS21>
           <AppLayout>
             <TestPage />
           </AppLayout>
         </ProtectedRoute>
       </Route>
       <Route path="/demo">
-        <ProtectedRoute>
+        <ProtectedRoute requireDASS21>
           <AppLayout>
             <SystemPromptDemo />
           </AppLayout>
@@ -56,7 +57,7 @@ function Router() {
       
       {/* Journal - Mental Health Journaling with AI Analysis */}
       <Route path="/journal">
-        <ProtectedRoute>
+        <ProtectedRoute requireDASS21>
           <AppLayout>
             <JournalPage />
           </AppLayout>
@@ -65,7 +66,7 @@ function Router() {
       
       {/* Dashboard - Mental Health Analytics */}
       <Route path="/dashboard">
-        <ProtectedRoute>
+        <ProtectedRoute requireDASS21>
           <AppLayout>
             <DashboardPage />
           </AppLayout>
@@ -74,7 +75,7 @@ function Router() {
       
       {/* Reports - Export & PDF Generation */}
       <Route path="/reports">
-        <ProtectedRoute>
+        <ProtectedRoute requireDASS21>
           <AppLayout>
             <ReportsPage />
           </AppLayout>
@@ -83,7 +84,7 @@ function Router() {
 
       {/* Settings */}
       <Route path="/settings">
-        <ProtectedRoute>
+        <ProtectedRoute requireDASS21>
           <AppLayout>
             <SettingsPage />
           </AppLayout>
@@ -92,7 +93,7 @@ function Router() {
       
       {/* Voice Therapy - Full screen experience */}
       <Route path="/voice">
-        <ProtectedRoute>
+        <ProtectedRoute requireDASS21>
           <VoicePage />
         </ProtectedRoute>
       </Route>
@@ -106,10 +107,12 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Router />
-        </TooltipProvider>
+        <TourProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Router />
+          </TooltipProvider>
+        </TourProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

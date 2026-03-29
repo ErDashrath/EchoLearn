@@ -697,6 +697,7 @@ const VoiceTherapyPage: React.FC = () => {
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
+          data-tour-id="voice-readiness"
           className="text-center mb-8"
         >
           <div className="flex items-center justify-between mb-4">
@@ -852,6 +853,7 @@ const VoiceTherapyPage: React.FC = () => {
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
+                  data-tour-id="voice-main-button"
                   onClick={continuousMode ? handleContinuousToggle : undefined}
                   onMouseDown={!continuousMode ? handlePushToTalk : undefined}
                   onMouseUp={!continuousMode ? async () => {
