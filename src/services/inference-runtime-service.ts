@@ -1,5 +1,8 @@
 import { webllmService } from '@/services/webllm-service';
-import { nativeCpuInferenceService } from '@/services/native-cpu-inference-service';
+import {
+  nativeCpuInferenceService,
+  type NativeCpuInferenceStatus,
+} from '@/services/native-cpu-inference-service';
 
 export type InferenceProviderId = 'webllm-webgpu' | 'native-cpu';
 
@@ -13,6 +16,7 @@ export interface InferenceRuntimeCapabilities {
   checkedAtIso: string;
   webgpu: ProviderCapability;
   nativeCpu: ProviderCapability;
+  nativeCpuStatus: NativeCpuInferenceStatus;
   recommendedProvider: InferenceProviderId | null;
 }
 
@@ -30,10 +34,11 @@ class InferenceRuntimeService {
     };
   }
 
-  // Phase 1 scaffold: native CPU runtime is not yet wired.
-  private async detectNativeCpuCapability(): Promise<ProviderCapability> {
-    const status = await nativeCpuInferenceService.getStatus();
+  private async getNativeCpuStatus(): Promise<NativeCpuInferenceStatus> {
+    return nativeCpuInferenceService.getStatus();
+  }
 
+  private getNativeCpuCapability(status: NativeCpuInferenceStatus): ProviderCapability {
     return {
       provider: 'native-cpu',
       available: status.available,
@@ -42,10 +47,11 @@ class InferenceRuntimeService {
   }
 
   async getCapabilities(): Promise<InferenceRuntimeCapabilities> {
-    const [webgpu, nativeCpu] = await Promise.all([
+    const [webgpu, nativeCpuStatus] = await Promise.all([
       this.detectWebGpuCapability(),
-      this.detectNativeCpuCapability(),
+      this.getNativeCpuStatus(),
     ]);
+    const nativeCpu = this.getNativeCpuCapability(nativeCpuStatus);
 
     const recommendedProvider = webgpu.available
       ? 'webllm-webgpu'
@@ -57,6 +63,7 @@ class InferenceRuntimeService {
       checkedAtIso: new Date().toISOString(),
       webgpu,
       nativeCpu,
+      nativeCpuStatus,
       recommendedProvider,
     };
   }

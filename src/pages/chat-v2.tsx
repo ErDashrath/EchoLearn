@@ -54,6 +54,8 @@ export default function ChatPage() {
     messages,
     isLoading,
     isGenerating,
+    activeInferenceProvider,
+    inferenceCapabilities,
     createNewSession,
     loadSession,
     deleteSession,
@@ -103,6 +105,21 @@ export default function ChatPage() {
     feedback: null,
   }));
 
+  const providerLabel = activeInferenceProvider === 'native-cpu'
+    ? 'Native CPU'
+    : activeInferenceProvider === 'webllm-webgpu'
+      ? 'WebGPU'
+      : 'Unavailable';
+
+  const inferenceBlocked = !!inferenceCapabilities && !inferenceCapabilities.recommendedProvider;
+  const capabilityReason = inferenceBlocked
+    ? [inferenceCapabilities?.webgpu.reason, inferenceCapabilities?.nativeCpu.reason]
+        .filter((value): value is string => !!value)
+        .join(' ')
+    : '';
+
+  const nativeStatus = inferenceCapabilities?.nativeCpuStatus;
+
   return (
     <div className="journal-shell min-h-screen bg-[var(--bg)] text-[var(--text-primary)] flex flex-col [font-family:Inter,sans-serif]">
       {/* Chat History Sidebar */}
@@ -145,6 +162,15 @@ export default function ChatPage() {
         </div>
 
         <div className="flex items-center space-x-2">
+          <span
+            className={`text-xs px-2 py-1 rounded-full border ${
+              activeInferenceProvider
+                ? 'border-emerald-500/30 text-emerald-300 bg-emerald-500/10'
+                : 'border-amber-500/30 text-amber-200 bg-amber-500/10'
+            }`}
+          >
+            Inference: {providerLabel}
+          </span>
           <Button
             variant="ghost"
             size="sm"
@@ -156,6 +182,23 @@ export default function ChatPage() {
           </Button>
         </div>
       </header>
+
+      {inferenceBlocked && (
+        <div className="px-5 pt-4">
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100">
+            <div className="font-medium">No local inference provider is available on this device.</div>
+            <div className="mt-1 text-amber-100/90">{capabilityReason || 'Check WebGPU support or native CPU setup.'}</div>
+            {nativeStatus && (
+              <div className="mt-2 text-xs text-amber-100/80 space-y-1">
+                <div>Native runtime: {nativeStatus.runtime || 'Not found'}</div>
+                <div>Native model: {nativeStatus.model || 'Not found'}</div>
+                <div>Runtime SHA-256: {nativeStatus.runtimeSha256 || 'Unavailable'}</div>
+                <div>Model SHA-256: {nativeStatus.modelSha256 || 'Unavailable'}</div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col">
@@ -203,7 +246,7 @@ export default function ChatPage() {
               <div className="sticky bottom-5 z-20">
                 <InputArea
                   onSendMessage={sendMessage}
-                  disabled={isGenerating || isLoading}
+                  disabled={isGenerating || isLoading || inferenceBlocked}
                   placeholder="Start typing... no structure needed."
                   isWelcomeScreen={true}
                   draftMessage={welcomeDraft}
@@ -226,7 +269,7 @@ export default function ChatPage() {
             <div className="sticky bottom-5 z-20 p-5 max-w-[720px] mx-auto w-full">
               <InputArea
                 onSendMessage={sendMessage}
-                disabled={isGenerating || isLoading}
+                disabled={isGenerating || isLoading || inferenceBlocked}
                 placeholder="Start typing... no structure needed."
                 isWelcomeScreen={false}
               />
