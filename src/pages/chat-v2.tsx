@@ -54,6 +54,10 @@ export default function ChatPage() {
     messages,
     isLoading,
     isGenerating,
+    inferenceSelectionMode,
+    setInferenceSelectionMode,
+    activeInferenceProvider,
+    inferenceCapabilities,
     createNewSession,
     loadSession,
     deleteSession,
@@ -103,6 +107,36 @@ export default function ChatPage() {
     feedback: null,
   }));
 
+  const providerLabel = activeInferenceProvider === 'native-cpu'
+    ? 'Native CPU'
+    : activeInferenceProvider === 'webllm-webgpu'
+      ? 'WebGPU'
+      : 'Unavailable';
+
+  const inferenceBlocked = !!inferenceCapabilities && !activeInferenceProvider;
+  const capabilityReason = inferenceBlocked
+    ? inferenceSelectionMode === 'webllm-webgpu'
+      ? inferenceCapabilities?.webgpu.reason || 'WebGPU provider is unavailable.'
+      : inferenceSelectionMode === 'native-cpu'
+        ? inferenceCapabilities?.nativeCpu.reason || 'Native CPU provider is unavailable.'
+        : [inferenceCapabilities?.webgpu.reason, inferenceCapabilities?.nativeCpu.reason]
+            .filter((value): value is string => !!value)
+            .join(' ')
+    : '';
+
+  const nativeStatus = inferenceCapabilities?.nativeCpuStatus;
+  const webgpuAvailable = inferenceCapabilities?.webgpu.available ?? false;
+  const nativeCpuAvailable = inferenceCapabilities?.nativeCpu.available ?? false;
+  const webgpuReason = inferenceCapabilities?.webgpu.reason || 'WebGPU provider is unavailable.';
+  const nativeCpuReason = inferenceCapabilities?.nativeCpu.reason || 'Native CPU provider is unavailable.';
+  const fallbackNotice = inferenceSelectionMode !== 'auto' && activeInferenceProvider
+    ? inferenceSelectionMode === 'webllm-webgpu' && activeInferenceProvider === 'native-cpu'
+      ? 'WebGPU is unavailable. Using Native CPU fallback.'
+      : inferenceSelectionMode === 'native-cpu' && activeInferenceProvider === 'webllm-webgpu'
+        ? 'Native CPU is unavailable. Using WebGPU fallback.'
+        : ''
+    : '';
+
   return (
     <div className="journal-shell min-h-screen bg-[var(--bg)] text-[var(--text-primary)] flex flex-col [font-family:Inter,sans-serif]">
       {/* Chat History Sidebar */}
@@ -145,6 +179,67 @@ export default function ChatPage() {
         </div>
 
         <div className="flex items-center space-x-2">
+          <div className="flex items-center rounded-lg border border-[var(--inner)] overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setInferenceSelectionMode('auto')}
+              className={`px-2 py-1 text-xs ${
+                inferenceSelectionMode === 'auto'
+                  ? 'bg-[var(--inner)] text-[var(--text-primary)]'
+                  : 'text-[var(--text-secondary)] hover:bg-[var(--inner)]'
+              }`}
+            >
+              Auto
+            </button>
+            <button
+              type="button"
+              onClick={() => setInferenceSelectionMode('webllm-webgpu')}
+              disabled={!!inferenceCapabilities && !webgpuAvailable}
+              title={!!inferenceCapabilities && !webgpuAvailable ? webgpuReason : 'Use WebGPU inference'}
+              className={`px-2 py-1 text-xs border-l border-[var(--inner)] ${
+                inferenceSelectionMode === 'webllm-webgpu'
+                  ? 'bg-[var(--inner)] text-[var(--text-primary)]'
+                  : 'text-[var(--text-secondary)] hover:bg-[var(--inner)]'
+              } ${
+                !!inferenceCapabilities && !webgpuAvailable
+                  ? 'opacity-50 cursor-not-allowed hover:bg-transparent'
+                  : ''
+              }`}
+            >
+              WebGPU
+            </button>
+            <button
+              type="button"
+              onClick={() => setInferenceSelectionMode('native-cpu')}
+              disabled={!!inferenceCapabilities && !nativeCpuAvailable}
+              title={!!inferenceCapabilities && !nativeCpuAvailable ? nativeCpuReason : 'Use Native CPU inference'}
+              className={`px-2 py-1 text-xs border-l border-[var(--inner)] ${
+                inferenceSelectionMode === 'native-cpu'
+                  ? 'bg-[var(--inner)] text-[var(--text-primary)]'
+                  : 'text-[var(--text-secondary)] hover:bg-[var(--inner)]'
+              } ${
+                !!inferenceCapabilities && !nativeCpuAvailable
+                  ? 'opacity-50 cursor-not-allowed hover:bg-transparent'
+                  : ''
+              }`}
+            >
+              Native CPU
+            </button>
+          </div>
+          <span
+            className={`text-xs px-2 py-1 rounded-full border ${
+              activeInferenceProvider
+                ? 'border-emerald-500/30 text-emerald-300 bg-emerald-500/10'
+                : 'border-amber-500/30 text-amber-200 bg-amber-500/10'
+            }`}
+          >
+            Inference: {providerLabel} ({inferenceSelectionMode})
+          </span>
+          {fallbackNotice && (
+            <span className="text-xs px-2 py-1 rounded-full border border-amber-500/30 text-amber-200 bg-amber-500/10">
+              {fallbackNotice}
+            </span>
+          )}
           <Button
             variant="ghost"
             size="sm"
@@ -156,6 +251,26 @@ export default function ChatPage() {
           </Button>
         </div>
       </header>
+
+      {inferenceBlocked && (
+        <div className="px-5 pt-4">
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100">
+            <div className="font-medium">No local inference provider is available on this device.</div>
+            <div className="mt-1 text-amber-100/90">{capabilityReason || 'Check WebGPU support or native CPU setup.'}</div>
+            {nativeStatus && (
+              <div className="mt-2 text-xs text-amber-100/80 space-y-1">
+                <div>Native profile: {nativeStatus.profile || 'N/A'}</div>
+                <div>Effective threads: {nativeStatus.effectiveThreads ?? 'N/A'}</div>
+                <div>Token cap: {nativeStatus.maxTokensCap ?? 'N/A'}</div>
+                <div>Native runtime: {nativeStatus.runtime || 'Not found'}</div>
+                <div>Native model: {nativeStatus.model || 'Not found'}</div>
+                <div>Runtime SHA-256: {nativeStatus.runtimeSha256 || 'Unavailable'}</div>
+                <div>Model SHA-256: {nativeStatus.modelSha256 || 'Unavailable'}</div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col">
@@ -203,7 +318,7 @@ export default function ChatPage() {
               <div className="sticky bottom-5 z-20">
                 <InputArea
                   onSendMessage={sendMessage}
-                  disabled={isGenerating || isLoading}
+                  disabled={isGenerating || isLoading || inferenceBlocked}
                   placeholder="Start typing... no structure needed."
                   isWelcomeScreen={true}
                   draftMessage={welcomeDraft}
@@ -226,7 +341,7 @@ export default function ChatPage() {
             <div className="sticky bottom-5 z-20 p-5 max-w-[720px] mx-auto w-full">
               <InputArea
                 onSendMessage={sendMessage}
-                disabled={isGenerating || isLoading}
+                disabled={isGenerating || isLoading || inferenceBlocked}
                 placeholder="Start typing... no structure needed."
                 isWelcomeScreen={false}
               />

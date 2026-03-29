@@ -11,6 +11,13 @@ import { useChat } from "@/hooks/use-chat";
 import { useChatSession } from "@/hooks/use-chat-session";
 import { useAuth } from "@/contexts/AuthContext";
 import { Bot, Volume2, VolumeX, Brain } from "lucide-react";
+import {
+  inferenceRuntimeService,
+  type InferenceProviderId,
+  type InferenceSelectionMode,
+  type InferenceRuntimeCapabilities,
+} from "@/services/inference-runtime-service";
+import { webllmService } from "@/services/webllm-service";
 import type { ChatMode, FocusMode } from "@/types/schema";
 import type { DASS21Results } from "@/services/mental-health-prompt-service";
 
@@ -18,6 +25,11 @@ export default function ChatPage() {
   const [showSidebar, setShowSidebar] = useState(false);
   const [showModelPanel, setShowModelPanel] = useState(false);
   const [dass21Results, setDass21Results] = useState<DASS21Results | null>(null);
+  const [inferenceSelectionMode, setInferenceSelectionMode] =
+    useState<InferenceSelectionMode>(() => inferenceRuntimeService.getSelectionMode());
+  const [activeInferenceProvider, setActiveInferenceProvider] = useState<InferenceProviderId | null>(null);
+  const [inferenceCapabilities, setInferenceCapabilities] =
+    useState<InferenceRuntimeCapabilities | null>(null);
   // System prompt state
   const [customSystemPrompt, setCustomSystemPrompt] = useState("");
   const [isCustomPromptEnabled, setIsCustomPromptEnabled] = useState(false);
@@ -44,6 +56,35 @@ export default function ChatPage() {
     };
     loadDASS21();
   }, [hasCompletedDASS21, getDASS21Results]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const refreshCapabilities = async () => {
+      try {
+        const capabilities = await inferenceRuntimeService.getCapabilities();
+        if (!mounted) {
+          return;
+        }
+        const provider = inferenceRuntimeService.resolveProvider(capabilities, inferenceSelectionMode);
+        setInferenceCapabilities(capabilities);
+        setActiveInferenceProvider(provider);
+      } catch {
+        if (mounted) {
+          setInferenceCapabilities(null);
+          setActiveInferenceProvider(null);
+        }
+      }
+    };
+
+    refreshCapabilities();
+    const interval = setInterval(refreshCapabilities, 15000);
+
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [inferenceSelectionMode]);
   
   const {
     messages,
@@ -67,6 +108,7 @@ export default function ChatPage() {
     userName: user?.username || user?.name,
     dass21Results
   });
+  const fallbackModelId = webllmService.getAvailableModels()[0]?.id;
 
   const handleModeChange = (newMode: ChatMode) => {
     updateMode(newMode);
@@ -138,6 +180,45 @@ export default function ChatPage() {
     return name ? `${greeting}, ${name}` : greeting;
   };
 
+  const handleInferenceModeChange = (mode: InferenceSelectionMode) => {
+    inferenceRuntimeService.setSelectionMode(mode);
+    setInferenceSelectionMode(mode);
+
+    if (inferenceCapabilities) {
+      setActiveInferenceProvider(inferenceRuntimeService.resolveProvider(inferenceCapabilities, mode));
+    }
+  };
+
+  const providerLabel = activeInferenceProvider === 'native-cpu'
+    ? 'Native CPU'
+    : activeInferenceProvider === 'webllm-webgpu'
+      ? 'WebGPU'
+      : 'Unavailable';
+
+  const inferenceBlocked = !!inferenceCapabilities && !activeInferenceProvider;
+  const capabilityReason = inferenceBlocked
+    ? inferenceSelectionMode === 'webllm-webgpu'
+      ? inferenceCapabilities?.webgpu.reason || 'WebGPU provider is unavailable.'
+      : inferenceSelectionMode === 'native-cpu'
+        ? inferenceCapabilities?.nativeCpu.reason || 'Native CPU provider is unavailable.'
+        : [inferenceCapabilities?.webgpu.reason, inferenceCapabilities?.nativeCpu.reason]
+            .filter((value): value is string => !!value)
+            .join(' ')
+    : '';
+
+  const nativeStatus = inferenceCapabilities?.nativeCpuStatus;
+  const webgpuAvailable = inferenceCapabilities?.webgpu.available ?? false;
+  const nativeCpuAvailable = inferenceCapabilities?.nativeCpu.available ?? false;
+  const webgpuReason = inferenceCapabilities?.webgpu.reason || 'WebGPU provider is unavailable.';
+  const nativeCpuReason = inferenceCapabilities?.nativeCpu.reason || 'Native CPU provider is unavailable.';
+  const fallbackNotice = inferenceSelectionMode !== 'auto' && activeInferenceProvider
+    ? inferenceSelectionMode === 'webllm-webgpu' && activeInferenceProvider === 'native-cpu'
+      ? 'WebGPU is unavailable. Using Native CPU fallback.'
+      : inferenceSelectionMode === 'native-cpu' && activeInferenceProvider === 'webllm-webgpu'
+        ? 'Native CPU is unavailable. Using WebGPU fallback.'
+        : ''
+    : '';
+
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col">
       {/* Header with Hamburger Menu */}
@@ -162,6 +243,67 @@ export default function ChatPage() {
         </div>
         
         <div className="flex items-center space-x-2">
+          <div className="flex items-center rounded-lg border border-gray-700 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => handleInferenceModeChange('auto')}
+              className={`px-2 py-1 text-xs ${
+                inferenceSelectionMode === 'auto'
+                  ? 'bg-gray-700 text-white'
+                  : 'text-gray-300 hover:bg-gray-800'
+              }`}
+            >
+              Auto
+            </button>
+            <button
+              type="button"
+              onClick={() => handleInferenceModeChange('webllm-webgpu')}
+              disabled={!!inferenceCapabilities && !webgpuAvailable}
+              title={!!inferenceCapabilities && !webgpuAvailable ? webgpuReason : 'Use WebGPU inference'}
+              className={`px-2 py-1 text-xs border-l border-gray-700 ${
+                inferenceSelectionMode === 'webllm-webgpu'
+                  ? 'bg-gray-700 text-white'
+                  : 'text-gray-300 hover:bg-gray-800'
+              } ${
+                !!inferenceCapabilities && !webgpuAvailable
+                  ? 'opacity-50 cursor-not-allowed hover:bg-transparent'
+                  : ''
+              }`}
+            >
+              WebGPU
+            </button>
+            <button
+              type="button"
+              onClick={() => handleInferenceModeChange('native-cpu')}
+              disabled={!!inferenceCapabilities && !nativeCpuAvailable}
+              title={!!inferenceCapabilities && !nativeCpuAvailable ? nativeCpuReason : 'Use Native CPU inference'}
+              className={`px-2 py-1 text-xs border-l border-gray-700 ${
+                inferenceSelectionMode === 'native-cpu'
+                  ? 'bg-gray-700 text-white'
+                  : 'text-gray-300 hover:bg-gray-800'
+              } ${
+                !!inferenceCapabilities && !nativeCpuAvailable
+                  ? 'opacity-50 cursor-not-allowed hover:bg-transparent'
+                  : ''
+              }`}
+            >
+              Native CPU
+            </button>
+          </div>
+          <span
+            className={`text-xs px-2 py-1 rounded-full border ${
+              activeInferenceProvider
+                ? 'border-emerald-500/30 text-emerald-300 bg-emerald-500/10'
+                : 'border-amber-500/30 text-amber-200 bg-amber-500/10'
+            }`}
+          >
+            Inference: {providerLabel} ({inferenceSelectionMode})
+          </span>
+          {fallbackNotice && (
+            <span className="text-xs px-2 py-1 rounded-full border border-amber-500/30 text-amber-200 bg-amber-500/10">
+              {fallbackNotice}
+            </span>
+          )}
           {/* Model Download Button - Opens Right Panel */}
           <Button
             variant="ghost"
@@ -175,7 +317,7 @@ export default function ChatPage() {
           
           {/* Model Selector - Shows current model */}
           <ModelSelector
-            selectedModel={selectedModel || "llama-3.2-3b"}
+            selectedModel={selectedModel || fallbackModelId}
             onModelSelect={selectWebLLMModel}
             isLoading={isWebllmGenerating}
             onOpenSidebar={toggleModelPanel}
@@ -193,6 +335,26 @@ export default function ChatPage() {
           </Button>
         </div>
       </header>
+
+      {inferenceBlocked && (
+        <div className="px-4 pt-3">
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100">
+            <div className="font-medium">No local inference provider is available on this device.</div>
+            <div className="mt-1 text-amber-100/90">{capabilityReason || 'Check WebGPU support or native CPU setup.'}</div>
+            {nativeStatus && (
+              <div className="mt-2 text-xs text-amber-100/80 space-y-1">
+                <div>Native profile: {nativeStatus.profile || 'N/A'}</div>
+                <div>Effective threads: {nativeStatus.effectiveThreads ?? 'N/A'}</div>
+                <div>Token cap: {nativeStatus.maxTokensCap ?? 'N/A'}</div>
+                <div>Native runtime: {nativeStatus.runtime || 'Not found'}</div>
+                <div>Native model: {nativeStatus.model || 'Not found'}</div>
+                <div>Runtime SHA-256: {nativeStatus.runtimeSha256 || 'Unavailable'}</div>
+                <div>Model SHA-256: {nativeStatus.modelSha256 || 'Unavailable'}</div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Main Content Area */}
       <div className={`flex-1 flex flex-col transition-all duration-300 ${showSidebar ? 'ml-80' : ''}`}>
@@ -239,7 +401,7 @@ export default function ChatPage() {
               <div className="relative">
                 <InputArea
                   onSendMessage={sendMessage}
-                  disabled={isSending || messagesLoading}
+                  disabled={isSending || messagesLoading || inferenceBlocked}
                   placeholder="Share what's on your mind... I'm here to listen."
                   isWelcomeScreen={true}
                 />
@@ -250,6 +412,7 @@ export default function ChatPage() {
                 <Button
                   variant="outline"
                   className="bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700 hover:text-white"
+                  disabled={inferenceBlocked}
                   onClick={() => sendMessage("I'm feeling anxious and need someone to talk to")}
                 >
                   Feeling Anxious
@@ -257,6 +420,7 @@ export default function ChatPage() {
                 <Button
                   variant="outline"
                   className="bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700 hover:text-white"
+                  disabled={inferenceBlocked}
                   onClick={() => sendMessage("I'm dealing with stress and need coping strategies")}
                 >
                   Managing Stress
@@ -264,6 +428,7 @@ export default function ChatPage() {
                 <Button
                   variant="outline"
                   className="bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700 hover:text-white"
+                  disabled={inferenceBlocked}
                   onClick={() => sendMessage("I need help processing my emotions today")}
                 >
                   Process Emotions
@@ -271,6 +436,7 @@ export default function ChatPage() {
                 <Button
                   variant="outline"
                   className="bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700 hover:text-white"
+                  disabled={inferenceBlocked}
                   onClick={() => sendMessage("I want to talk about my relationships and get advice")}
                 >
                   Relationship Support
@@ -292,7 +458,7 @@ export default function ChatPage() {
             <div className="p-4 max-w-2xl mx-auto w-full">
               <InputArea
                 onSendMessage={sendMessage}
-                disabled={isSending || messagesLoading}
+                disabled={isSending || messagesLoading || inferenceBlocked}
                 placeholder="Continue the conversation..."
                 isWelcomeScreen={false}
               />

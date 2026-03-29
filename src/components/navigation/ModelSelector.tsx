@@ -11,19 +11,7 @@ import {
   Circle,
   Loader2 
 } from "lucide-react";
-import { webllmService } from "@/services/webllm-service";
-
-interface Model {
-  id: string;
-  name: string;
-  description: string;
-  type: "cloud" | "local";
-  size?: string;
-  speed: "fast" | "medium" | "slow";
-  quality: "high" | "medium" | "low";
-  isAvailable?: boolean;
-  isLoading?: boolean;
-}
+import { webllmService, type WebLLMModel } from "@/services/webllm-service";
 
 interface ModelSelectorProps {
   selectedModel?: string;
@@ -32,58 +20,30 @@ interface ModelSelectorProps {
   onOpenSidebar?: () => void; // Add callback to open sidebar
 }
 
-const AVAILABLE_MODELS: Model[] = [
-  {
-    id: "llama-3.2-3b",
-    name: "Llama 3.2 3B",
-    description: "Fast and efficient local model",
-    type: "local",
-    size: "1.8GB",
-    speed: "fast",
-    quality: "high",
-    isAvailable: true,
-  },
-  {
-    id: "llama-3.2-1b",
-    name: "Llama 3.2 1B",
-    description: "Ultra-lightweight local model",
-    type: "local",
-    size: "0.9GB",
-    speed: "fast",
-    quality: "medium",
-    isAvailable: true,
-  },
-  {
-    id: "phi-3-mini",
-    name: "Phi-3 Mini",
-    description: "Compact and efficient model",
-    type: "local",
-    size: "2.1GB",
-    speed: "medium",
-    quality: "high",
-    isAvailable: true,
-  },
-  {
-    id: "gemma-2b",
-    name: "Gemma 2B",
-    description: "Google's lightweight model",
-    type: "local",
-    size: "1.4GB",
-    speed: "fast",
-    quality: "medium",
-    isAvailable: true,
-  },
-  {
-    id: "qwen-1.5-0.5b",
-    name: "Qwen 1.5 0.5B",
-    description: "Very fast, minimal resource usage",
-    type: "local",
-    size: "0.4GB",
-    speed: "fast",
-    quality: "low",
-    isAvailable: true,
-  },
-];
+interface DecoratedModel extends WebLLMModel {
+  speed: "fast" | "medium" | "slow";
+  quality: "high" | "medium" | "low";
+}
+
+function decorateModel(model: WebLLMModel): DecoratedModel {
+  const speed: DecoratedModel['speed'] = model.sizeGB <= 1.0
+    ? 'fast'
+    : model.sizeGB <= 2.2
+      ? 'medium'
+      : 'slow';
+
+  const quality: DecoratedModel['quality'] = model.sizeGB >= 2.0
+    ? 'high'
+    : model.sizeGB >= 1.0
+      ? 'medium'
+      : 'low';
+
+  return {
+    ...model,
+    speed,
+    quality,
+  };
+}
 
 export function ModelSelector({ 
   selectedModel, 
@@ -121,15 +81,6 @@ export function ModelSelector({
     // Initial load
     updateCachedModels();
     
-    // TEST: Add a test model for debugging (remove this after testing)
-    if (process.env.NODE_ENV === 'development') {
-      setTimeout(() => {
-        console.log('Adding test model for debugging...');
-        webllmService.addTestModel();
-        updateCachedModels();
-      }, 1000);
-    }
-    
     // Check for updates every 3 seconds
     const interval = setInterval(updateCachedModels, 3000);
     
@@ -137,7 +88,10 @@ export function ModelSelector({
   }, []);
   
   // Get only downloaded/cached models
-  const availableModels = AVAILABLE_MODELS.filter(model => cachedModels.includes(model.id));
+  const availableModels = webllmService
+    .getAvailableModels()
+    .filter(model => cachedModels.includes(model.id))
+    .map(decorateModel);
   
   // Current model is the active model if it exists, otherwise first available
   const currentModel = activeModel 

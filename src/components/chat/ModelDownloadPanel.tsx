@@ -15,6 +15,9 @@ import {
   HardDrive
 } from "lucide-react";
 import { webllmService, type WebLLMModel } from "@/services/webllm-service";
+import { nativeCpuInferenceService } from "@/services/native-cpu-inference-service";
+import { modelVariantService } from "@/services/model-variant-service";
+import { useToast } from "@/hooks/use-toast";
 
 interface ModelDownloadPanelProps {
   isOpen: boolean;
@@ -28,6 +31,7 @@ export function ModelDownloadPanel({
   onClose,
   onModelSelect
 }: ModelDownloadPanelProps) {
+  const { toast } = useToast();
   const [downloadingModel, setDownloadingModel] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<{ progress: number; text: string } | null>(null);
   const [availableModels, setAvailableModels] = useState<WebLLMModel[]>([]);
@@ -70,12 +74,68 @@ export function ModelDownloadPanel({
     try {
       const success = await webllmService.loadModel(model.id);
       if (success) {
-        setCachedModels(prev => [...prev, model.id]);
+        webllmService.clearProgressCallback();
+
+        const runtimeUrl = modelVariantService.getNativeRuntimeUrl();
+        if (runtimeUrl) {
+          setDownloadProgress({
+            progress: 0.92,
+            text: 'Preparing native CPU runtime...',
+          });
+
+          try {
+            const runtimeResult = await nativeCpuInferenceService.downloadRuntimeFromUrl(runtimeUrl);
+            if (runtimeResult?.runtimePath) {
+              modelVariantService.setNativeRuntimePath(runtimeResult.runtimePath);
+            }
+          } catch (runtimeError) {
+            console.warn('Native runtime download failed:', runtimeError);
+            toast({
+              title: 'Native runtime download failed',
+              description: 'WebGPU model is ready. Native CPU runtime can be downloaded later.',
+              variant: 'destructive',
+            });
+          }
+        }
+
+        if (model.native?.hfUrl) {
+          setDownloadProgress({
+            progress: 0.98,
+            text: 'Finalizing native CPU model (GGUF)...',
+          });
+
+          try {
+            const nativeResult = await nativeCpuInferenceService.downloadModelFromUrl(
+              model.id,
+              model.native.hfUrl,
+            );
+
+            if (nativeResult?.modelPath) {
+              modelVariantService.setNativeModelPath(model.id, nativeResult.modelPath);
+            }
+          } catch (nativeError) {
+            console.warn('Native model download failed:', nativeError);
+            toast({
+              title: 'Native model download failed',
+              description: 'WebGPU model is ready. Native CPU variant can be downloaded later.',
+              variant: 'destructive',
+            });
+          }
+        }
+
+        setCachedModels(prev => prev.includes(model.id) ? prev : [...prev, model.id]);
         onModelSelect?.(model.id);
         setActiveModel(model.id);
       }
     } catch (error) {
       console.error('Download failed:', error);
+      toast({
+        title: 'Model download failed',
+        description: error instanceof Error
+          ? error.message
+          : 'Unable to download model right now. Please retry.',
+        variant: 'destructive',
+      });
     } finally {
       setDownloadingModel(null);
       setDownloadProgress(null);

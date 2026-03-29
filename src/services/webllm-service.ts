@@ -5,6 +5,10 @@ declare global {
   interface Navigator {
     gpu?: any;
   }
+
+  interface Window {
+    __MINDSCRIBE_WEBLLM_MODELS__?: unknown;
+  }
 }
 
 export interface WebLLMModel {
@@ -14,6 +18,9 @@ export interface WebLLMModel {
   sizeGB: number;
   description: string;
   parameters: string;
+  native?: {
+    hfUrl?: string;
+  };
 }
 
 export interface WebLLMProgress {
@@ -32,6 +39,69 @@ export interface WebLLMGenerationConfig {
 export type InferenceProfile = 'balanced' | 'turbo';
 
 const INFERENCE_PROFILE_KEY = 'mindscribe.inference.profile';
+const WEBLLM_MODELS_STORAGE_KEY = 'mindscribe.webllm.models';
+
+function parseModelSizeGB(size: string): number {
+  const normalized = size.trim().toLowerCase();
+  const value = Number.parseFloat(normalized.replace(/[^\d.]/g, ''));
+  if (!Number.isFinite(value) || value <= 0) {
+    return 1;
+  }
+  return normalized.includes('mb') ? value / 1024 : value;
+}
+
+function sanitizeModelCatalog(input: unknown): WebLLMModel[] {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  const models: WebLLMModel[] = [];
+  for (const item of input) {
+    if (!item || typeof item !== 'object') {
+      continue;
+    }
+
+    const record = item as Record<string, unknown>;
+    const id = typeof record.id === 'string' ? record.id.trim() : '';
+    const name = typeof record.name === 'string' ? record.name.trim() : '';
+    if (!id || !name) {
+      continue;
+    }
+
+    const size = typeof record.size === 'string' && record.size.trim()
+      ? record.size.trim()
+      : '1.0GB';
+
+    const sizeGB = typeof record.sizeGB === 'number' && Number.isFinite(record.sizeGB)
+      ? record.sizeGB
+      : parseModelSizeGB(size);
+
+    models.push({
+      id,
+      name,
+      size,
+      sizeGB,
+      description: typeof record.description === 'string' ? record.description : 'Local model',
+      parameters: typeof record.parameters === 'string' ? record.parameters : 'Unknown',
+      native: (() => {
+        const native = record.native;
+        if (!native || typeof native !== 'object') {
+          return undefined;
+        }
+
+        const nativeRecord = native as Record<string, unknown>;
+        const hfUrl = typeof nativeRecord.hfUrl === 'string' ? nativeRecord.hfUrl.trim() : '';
+        if (!hfUrl) {
+          return undefined;
+        }
+
+        return { hfUrl };
+      })(),
+    });
+  }
+
+  return models;
+}
 
 interface GenerationConfigOverrides {
   task?: 'chat' | 'summary' | 'voice';
@@ -53,64 +123,39 @@ class WebLLMService {
   private isGenerating = false;
   private inferenceProfile: InferenceProfile = 'balanced';
 
-  private models: WebLLMModel[] = [
-    {
-      id: "Llama-3.2-1B-Instruct-q4f32_1-MLC",
-      name: "Llama 3.2 1B",
-      size: "1.2GB",
-      sizeGB: 1.2,
-      description: "Fast and efficient, great for quick responses",
-      parameters: "1B"
-    },
-    {
-      id: "Llama-3.2-3B-Instruct-q4f32_1-MLC",
-      name: "Llama 3.2 3B",
-      size: "2.0GB",
-      sizeGB: 2.0,
-      description: "Balanced performance and quality",
-      parameters: "3B"
-    },
-    {
-      id: "Phi-3-mini-4k-instruct-q4f16_1-MLC",
-      name: "Phi-3 Mini",
-      size: "2.2GB",
-      sizeGB: 2.2,
-      description: "Microsoft's efficient model",
-      parameters: "3.8B"
-    },
-    {
-      id: "gemma-2-2b-it-q4f16_1-MLC",
-      name: "Gemma 2 2B",
-      size: "1.6GB", 
-      sizeGB: 1.6,
-      description: "Google's compact model",
-      parameters: "2B"
-    },
-    {
-      id: "Qwen2.5-0.5B-Instruct-q4f16_1-MLC",
-      name: "Qwen2.5 0.5B",
-      size: "0.6GB",
-      sizeGB: 0.6,
-      description: "Ultra-lightweight model",
-      parameters: "0.5B"
-    },
-    {
-      id: "Qwen2.5-1.5B-Instruct-q4f16_1-MLC",
-      name: "Qwen2.5 1.5B",
-      size: "1.1GB",
-      sizeGB: 1.1,
-      description: "Efficient Chinese-English model",
-      parameters: "1.5B"
-    }
-  ];
+  private models: WebLLMModel[] = [];
 
   constructor() {
+    this.models = this.loadConfiguredModels();
+
     // Test if we have any cached models on initialization
     this.checkInitialCache();
     
     // Restore active model from localStorage
     this.restoreActiveModel();
     this.restoreInferenceProfile();
+  }
+
+  private loadConfiguredModels(): WebLLMModel[] {
+    const fromWindow = sanitizeModelCatalog(window.__MINDSCRIBE_WEBLLM_MODELS__);
+    if (fromWindow.length > 0) {
+      return fromWindow;
+    }
+
+    const stored = localStorage.getItem(WEBLLM_MODELS_STORAGE_KEY);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        const fromStorage = sanitizeModelCatalog(parsed);
+        if (fromStorage.length > 0) {
+          return fromStorage;
+        }
+      } catch (error) {
+        console.warn('Invalid webllm model catalog in storage:', error);
+      }
+    }
+
+    return [];
   }
 
   private restoreInferenceProfile() {
@@ -205,13 +250,6 @@ class WebLLMService {
     const totalCached = [...new Set([...cached, ...indexedDBCached])];
     if (totalCached.length === 0) {
       console.log('No cached models found.');
-      // Only auto-add test model in development for debugging
-      if (process.env.NODE_ENV === 'development') {
-        console.log('Development mode: Adding test model for debugging...');
-        this.addTestModel();
-      } else {
-        console.log('Production mode: No test models will be added automatically.');
-      }
     } else {
       console.log('Total cached models found:', totalCached);
     }
@@ -445,9 +483,14 @@ class WebLLMService {
   }
 
   // Test method to manually add models for debugging
-  addTestModel(modelId: string = "Llama-3.2-1B-Instruct-q4f32_1-MLC"): void {
-    console.log('Adding test model to cache:', modelId);
-    this.markModelAsCached(modelId);
+  addTestModel(modelId: string = ''): void {
+    const fallbackModelId = modelId || this.models[0]?.id;
+    if (!fallbackModelId) {
+      return;
+    }
+
+    console.log('Adding test model to cache:', fallbackModelId);
+    this.markModelAsCached(fallbackModelId);
   }
 
   private handleProgress(progress: any, isModelCached: boolean) {
@@ -676,6 +719,41 @@ class WebLLMService {
       throw error;
     } finally {
       this.isGenerating = false;
+    }
+  }
+
+  async *generateResponseWithFallback(
+    conversationHistory: Array<{ role: string; content: string }>,
+    config: WebLLMGenerationConfig = { temperature: 0.7, maxTokens: 512, topP: 0.9 },
+    systemPrompt?: string,
+  ): AsyncGenerator<string, void, unknown> {
+    if (!this.engine || !this.currentModel) {
+      throw new Error('No local WebLLM model loaded. Download and select a local model first.');
+    }
+
+    try {
+      for await (const chunk of this.generateResponse(conversationHistory, config, systemPrompt)) {
+        yield chunk;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const isAdapterIssue = /adapter-unavailable|webgpu|gpu|adapter/i.test(message);
+
+      if (!isAdapterIssue) {
+        throw error;
+      }
+
+      const hasWebGPU = !!navigator.gpu;
+      const adapter = hasWebGPU ? await navigator.gpu.requestAdapter().catch(() => null) : null;
+      const compatibilityReason = !hasWebGPU
+        ? 'WebGPU is not available in this browser.'
+        : !adapter
+          ? 'No compatible GPU adapter was found for WebGPU.'
+          : 'The GPU driver/browser could not initialize WebGPU for this model.';
+
+      throw new Error(
+        `${compatibilityReason} This device cannot run local WebLLM inference. Try newer GPU drivers, Edge/Chrome 113+, or another device with WebGPU support.`,
+      );
     }
   }
 

@@ -25,6 +25,14 @@ import {
 import { deviceMemoryService } from '@/services/device-memory-service';
 import { webllmService, type WebLLMGenerationConfig } from '@/services/webllm-service';
 import { mentalHealthPromptService, type DASS21Results } from '@/services/mental-health-prompt-service';
+import {
+  inferenceRuntimeService,
+  type InferenceProviderId,
+  type InferenceSelectionMode,
+  type InferenceRuntimeCapabilities,
+} from '@/services/inference-runtime-service';
+import { nativeCpuInferenceService } from '@/services/native-cpu-inference-service';
+import { modelVariantService } from '@/services/model-variant-service';
 import { ttsService } from '@/lib/tts-service';
 
 const GENERIC_REPLY_PATTERNS: RegExp[] = [
@@ -109,6 +117,10 @@ export interface PersistentChatReturn {
   
   // Model state
   selectedModel: string | null;
+  inferenceSelectionMode: InferenceSelectionMode;
+  setInferenceSelectionMode: (mode: InferenceSelectionMode) => void;
+  activeInferenceProvider: InferenceProviderId | null;
+  inferenceCapabilities: InferenceRuntimeCapabilities | null;
   
   // TTS state
   ttsEnabled: boolean;
@@ -155,6 +167,11 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
 
   // Model state
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
+  const [inferenceSelectionMode, setInferenceSelectionModeState] =
+    useState<InferenceSelectionMode>(() => inferenceRuntimeService.getSelectionMode());
+  const [activeInferenceProvider, setActiveInferenceProvider] = useState<InferenceProviderId | null>(null);
+  const [inferenceCapabilities, setInferenceCapabilities] =
+    useState<InferenceRuntimeCapabilities | null>(null);
 
   // TTS state
   const [ttsEnabled, setTtsEnabled] = useState(ttsService.getEnabled());
@@ -186,6 +203,55 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
     const interval = setInterval(updateSelectedModel, 5000);
     return () => clearInterval(interval);
   }, [selectedModel]);
+
+  // ===========================================================================
+  // INFERENCE CAPABILITIES
+  // ===========================================================================
+
+  useEffect(() => {
+    let mounted = true;
+
+    const refreshCapabilities = async () => {
+      try {
+        const mappedNativeModelPath = modelVariantService.getNativeModelPath(selectedModel);
+        const mappedNativeRuntimePath = modelVariantService.getNativeRuntimePath();
+        const capabilities = await inferenceRuntimeService.getCapabilities(
+          selectedModel ?? undefined,
+          mappedNativeModelPath,
+          mappedNativeRuntimePath,
+        );
+        if (!mounted) {
+          return;
+        }
+        const provider = inferenceRuntimeService.resolveProvider(capabilities, inferenceSelectionMode);
+        setInferenceCapabilities(capabilities);
+        setActiveInferenceProvider(provider);
+      } catch (error) {
+        if (import.meta.env.DEV) {
+          console.debug('Failed to refresh inference capabilities', error);
+        }
+      }
+    };
+
+    refreshCapabilities();
+    const interval = setInterval(refreshCapabilities, 15000);
+
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [inferenceSelectionMode, selectedModel]);
+
+  const setInferenceSelectionMode = useCallback((mode: InferenceSelectionMode) => {
+    inferenceRuntimeService.setSelectionMode(mode);
+    setInferenceSelectionModeState(mode);
+    setActiveInferenceProvider((previous) => {
+      if (!inferenceCapabilities) {
+        return previous;
+      }
+      return inferenceRuntimeService.resolveProvider(inferenceCapabilities, mode);
+    });
+  }, [inferenceCapabilities]);
 
   // ===========================================================================
   // LOAD SESSIONS ON MOUNT
@@ -385,27 +451,46 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
       return;
     }
 
-    // Check if model is ready
-    if (!selectedModel || !webllmService.isModelLoaded()) {
-      // Try to load if cached
-      if (selectedModel && webllmService.isModelCached(selectedModel)) {
-        try {
-          await webllmService.loadModel(selectedModel);
-        } catch (error) {
-          toast({
-            title: 'Model not ready',
-            description: 'Please wait for the model to load',
-            variant: 'destructive',
-          });
-          return;
+    const mappedNativeModelPath = modelVariantService.getNativeModelPath(selectedModel);
+    const mappedNativeRuntimePath = modelVariantService.getNativeRuntimePath();
+    const capabilities = await inferenceRuntimeService.getCapabilities(
+      selectedModel ?? undefined,
+      mappedNativeModelPath,
+      mappedNativeRuntimePath,
+    );
+    const selectedProvider = inferenceRuntimeService.resolveProvider(
+      capabilities,
+      inferenceSelectionMode,
+    );
+    setInferenceCapabilities(capabilities);
+    setActiveInferenceProvider(selectedProvider);
+
+    if (!selectedProvider) {
+      const reasons = inferenceRuntimeService.getUnavailableReason(
+        capabilities,
+        inferenceSelectionMode,
+      );
+
+      toast({
+        title: 'Unsupported device/runtime',
+        description: reasons || 'No compatible local inference provider is available on this device.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (
+      selectedProvider === 'webllm-webgpu' &&
+      selectedModel &&
+      webllmService.isModelCached(selectedModel) &&
+      !webllmService.isModelLoaded()
+    ) {
+      try {
+        await webllmService.loadModel(selectedModel);
+      } catch (error) {
+        if (import.meta.env.DEV) {
+          console.debug('Local model unavailable, continuing with compatibility fallback', error);
         }
-      } else {
-        toast({
-          title: 'No model selected',
-          description: 'Please select and load a model first',
-          variant: 'destructive',
-        });
-        return;
       }
     }
 
@@ -469,6 +554,53 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
         modelId: selectedModel,
       });
 
+      const generateFromActiveProvider = async function* (
+        promptOverride: string,
+        generationConfig: WebLLMGenerationConfig,
+      ): AsyncGenerator<string, void, unknown> {
+        if (selectedProvider === 'native-cpu') {
+          const transcript = conversationHistory
+            .map((message) => `${message.role === 'assistant' ? 'Assistant' : 'User'}: ${message.content}`)
+            .join('\n');
+
+          const nativePrompt = `${promptOverride}\n\n${transcript}\nAssistant:`;
+          let emittedAnyChunk = false;
+
+          try {
+            for await (const chunk of nativeCpuInferenceService.generateStream(nativePrompt, {
+              modelId: selectedModel ?? undefined,
+              modelPath: mappedNativeModelPath,
+              runtimePath: mappedNativeRuntimePath,
+              maxTokens: generationConfig.maxTokens,
+              temperature: generationConfig.temperature,
+            })) {
+              emittedAnyChunk = true;
+              yield chunk;
+            }
+          } catch (error) {
+            const recoveryMessage = emittedAnyChunk
+              ? '\n\n[Native CPU stream interrupted. Please retry this message.]'
+              : 'Native CPU generation failed before response started. Please retry after checking runtime/model integrity settings.';
+
+            if (import.meta.env.DEV) {
+              console.debug('Native CPU generation stream failed', error);
+            }
+
+            yield recoveryMessage;
+          }
+
+          return;
+        }
+
+        for await (const chunk of webllmService.generateResponseWithFallback(
+          conversationHistory,
+          generationConfig,
+          promptOverride,
+        )) {
+          yield chunk;
+        }
+      };
+
       // Create placeholder for AI message
       const aiMessagePlaceholder: ChatMessage = {
         id: `ai-${Date.now()}`,
@@ -483,11 +615,7 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
 
       // Stream the response
       let responseContent = '';
-      for await (const chunk of webllmService.generateResponse(
-        conversationHistory,
-        optimizedConfig,
-        finalSystemPrompt
-      )) {
+      for await (const chunk of generateFromActiveProvider(finalSystemPrompt, optimizedConfig)) {
         responseContent += chunk;
         
         // Update UI with streaming content
@@ -518,11 +646,7 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
           topP: Math.min(1, (optimizedConfig.topP ?? 0.9) + 0.05),
         };
 
-        for await (const chunk of webllmService.generateResponse(
-          conversationHistory,
-          retryConfig,
-          retryPrompt,
-        )) {
+        for await (const chunk of generateFromActiveProvider(retryPrompt, retryConfig)) {
           responseContent += chunk;
 
           const updatedMessages = [...currentSession.messages, {
@@ -581,9 +705,10 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
     } catch (error) {
       if ((error as Error).name !== 'AbortError') {
         console.error('Generation error:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Failed to generate AI response';
         toast({
           title: 'Generation failed',
-          description: 'Failed to generate AI response',
+          description: errorMessage,
           variant: 'destructive',
         });
       }
@@ -591,7 +716,17 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
       setIsGenerating(false);
       abortControllerRef.current = null;
     }
-  }, [session, user?.username, selectedModel, resolvedUserName, dass21Results, ttsEnabled, toast, scrollToBottom]);
+  }, [
+    session,
+    user?.username,
+    selectedModel,
+    resolvedUserName,
+    dass21Results,
+    ttsEnabled,
+    toast,
+    scrollToBottom,
+    inferenceSelectionMode,
+  ]);
 
   // ===========================================================================
   // SUMMARIZATION
@@ -685,6 +820,7 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
 
   const stopGeneration = useCallback(() => {
     webllmService.stopGeneration();
+    nativeCpuInferenceService.stop();
     abortControllerRef.current?.abort();
     setIsGenerating(false);
     toast({
@@ -747,6 +883,10 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
 
     // Model state
     selectedModel,
+    inferenceSelectionMode,
+    setInferenceSelectionMode,
+    activeInferenceProvider,
+    inferenceCapabilities,
 
     // TTS state
     ttsEnabled,
