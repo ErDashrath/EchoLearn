@@ -138,3 +138,4 @@ Enable local AI chat on Windows devices that cannot run WebGPU, while preserving
   - `MINDSCRIBE_NATIVE_CPU_RUNTIME`
   - `MINDSCRIBE_NATIVE_CPU_MODEL`
 - If required hashes are missing or mismatched, native provider remains unavailable with explicit reason.
+- Setup instructions: `docs/NATIVE_CPU_INTEGRITY_SETUP.md`
