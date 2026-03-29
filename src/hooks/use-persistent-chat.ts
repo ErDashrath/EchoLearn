@@ -529,12 +529,28 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
             .join('\n');
 
           const nativePrompt = `${promptOverride}\n\n${transcript}\nAssistant:`;
-          for await (const chunk of nativeCpuInferenceService.generateStream(nativePrompt, {
-            maxTokens: generationConfig.maxTokens,
-            temperature: generationConfig.temperature,
-          })) {
-            yield chunk;
+          let emittedAnyChunk = false;
+
+          try {
+            for await (const chunk of nativeCpuInferenceService.generateStream(nativePrompt, {
+              maxTokens: generationConfig.maxTokens,
+              temperature: generationConfig.temperature,
+            })) {
+              emittedAnyChunk = true;
+              yield chunk;
+            }
+          } catch (error) {
+            const recoveryMessage = emittedAnyChunk
+              ? '\n\n[Native CPU stream interrupted. Please retry this message.]'
+              : 'Native CPU generation failed before response started. Please retry after checking runtime/model integrity settings.';
+
+            if (import.meta.env.DEV) {
+              console.debug('Native CPU generation stream failed', error);
+            }
+
+            yield recoveryMessage;
           }
+
           return;
         }
 

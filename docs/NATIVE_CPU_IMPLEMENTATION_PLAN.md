@@ -139,3 +139,22 @@ Enable local AI chat on Windows devices that cannot run WebGPU, while preserving
   - `MINDSCRIBE_NATIVE_CPU_MODEL`
 - If required hashes are missing or mismatched, native provider remains unavailable with explicit reason.
 - Setup instructions: `docs/NATIVE_CPU_INTEGRITY_SETUP.md`
+
+## Performance Profiles (Implemented)
+- Profile env var: `MINDSCRIBE_NATIVE_CPU_PROFILE`
+  - `low`: minimal CPU pressure (threads <= 2, token cap 160)
+  - `balanced`: default profile (threads <= 6, token cap 320)
+  - `high`: better quality/perf on stronger CPUs (threads <= 10, token cap 512)
+- Optional manual override: `MINDSCRIBE_NATIVE_CPU_THREADS`
+- Effective profile/threads/token cap are now exposed in runtime diagnostics for both chat pages.
+
+### Recommended Presets
+- Low-end Windows laptops (older dual/quad core):
+  - `MINDSCRIBE_NATIVE_CPU_PROFILE=low`
+  - `MINDSCRIBE_NATIVE_CPU_THREADS=2`
+- Mid-range machines:
+  - `MINDSCRIBE_NATIVE_CPU_PROFILE=balanced`
+  - `MINDSCRIBE_NATIVE_CPU_THREADS=4` or `6`
+- High-end desktops:
+  - `MINDSCRIBE_NATIVE_CPU_PROFILE=high`
+  - `MINDSCRIBE_NATIVE_CPU_THREADS=8` (or above after thermal testing)

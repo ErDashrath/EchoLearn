@@ -7,6 +7,9 @@ export interface NativeCpuInferenceStatus {
   model?: string;
   runtimeSha256?: string;
   modelSha256?: string;
+  profile?: string;
+  effectiveThreads?: number;
+  maxTokensCap?: number;
   reason: string;
 }
 

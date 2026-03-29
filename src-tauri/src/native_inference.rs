@@ -20,6 +20,9 @@ pub struct NativeInferenceStatus {
   pub model: String,
   pub runtime_sha256: String,
   pub model_sha256: String,
+  pub profile: String,
+  pub effective_threads: u32,
+  pub max_tokens_cap: u32,
   pub reason: String,
 }
 
@@ -33,6 +36,19 @@ pub struct NativeInferenceStreamChunk {
 }
 
 static ACTIVE_NATIVE_PID: OnceLock<Mutex<Option<u32>>> = OnceLock::new();
+
+enum NativeCpuProfile {
+  Low,
+  Balanced,
+  High,
+}
+
+struct NativeInferenceRuntimeConfig {
+  profile: NativeCpuProfile,
+  threads: u32,
+  max_tokens: u32,
+  temperature: f32,
+}
 
 fn active_pid_slot() -> &'static Mutex<Option<u32>> {
   ACTIVE_NATIVE_PID.get_or_init(|| Mutex::new(None))
@@ -130,6 +146,83 @@ fn resolve_model_path() -> Option<PathBuf> {
   first_existing_path(&native_model_candidates())
 }
 
+fn detect_profile() -> NativeCpuProfile {
+  match env::var("MINDSCRIBE_NATIVE_CPU_PROFILE")
+    .ok()
+    .map(|value| value.trim().to_lowercase())
+    .as_deref()
+  {
+    Some("low") => NativeCpuProfile::Low,
+    Some("high") => NativeCpuProfile::High,
+    _ => NativeCpuProfile::Balanced,
+  }
+}
+
+fn profile_name(profile: &NativeCpuProfile) -> String {
+  match profile {
+    NativeCpuProfile::Low => String::from("low"),
+    NativeCpuProfile::Balanced => String::from("balanced"),
+    NativeCpuProfile::High => String::from("high"),
+  }
+}
+
+fn profile_thread_limit(profile: &NativeCpuProfile) -> u32 {
+  match profile {
+    NativeCpuProfile::Low => 2,
+    NativeCpuProfile::Balanced => 6,
+    NativeCpuProfile::High => 10,
+  }
+}
+
+fn profile_token_cap(profile: &NativeCpuProfile) -> u32 {
+  match profile {
+    NativeCpuProfile::Low => 160,
+    NativeCpuProfile::Balanced => 320,
+    NativeCpuProfile::High => 512,
+  }
+}
+
+fn profile_default_temperature(profile: &NativeCpuProfile) -> f32 {
+  match profile {
+    NativeCpuProfile::Low => 0.55,
+    NativeCpuProfile::Balanced => 0.70,
+    NativeCpuProfile::High => 0.80,
+  }
+}
+
+fn profile_effective_threads(profile: &NativeCpuProfile) -> u32 {
+  let available = std::thread::available_parallelism()
+    .map(|value| value.get() as u32)
+    .unwrap_or(4);
+  available.max(1).min(profile_thread_limit(profile))
+}
+
+fn build_runtime_config(max_tokens: Option<u32>, temperature: Option<f32>) -> NativeInferenceRuntimeConfig {
+  let profile = detect_profile();
+  let token_cap = profile_token_cap(&profile);
+
+  let requested_threads = env::var("MINDSCRIBE_NATIVE_CPU_THREADS")
+    .ok()
+    .and_then(|value| value.parse::<u32>().ok())
+    .filter(|value| *value > 0);
+
+  let threads = requested_threads
+    .unwrap_or_else(|| profile_effective_threads(&profile))
+    .clamp(1, 16);
+
+  let max_tokens = max_tokens.unwrap_or(token_cap).clamp(16, token_cap);
+  let temperature = temperature
+    .unwrap_or_else(|| profile_default_temperature(&profile))
+    .clamp(0.0, 1.5);
+
+  NativeInferenceRuntimeConfig {
+    profile,
+    threads,
+    max_tokens,
+    temperature,
+  }
+}
+
 fn expected_runtime_hash() -> Option<String> {
   env::var("MINDSCRIBE_NATIVE_CPU_RUNTIME_SHA256")
     .ok()
@@ -206,6 +299,9 @@ pub fn native_inference_status() -> NativeInferenceStatus {
       model: String::new(),
         runtime_sha256: String::new(),
         model_sha256: String::new(),
+        profile: String::new(),
+        effective_threads: 0,
+        max_tokens_cap: 0,
       reason: String::from("Native CPU inference is currently implemented for Windows only."),
     };
   }
@@ -219,6 +315,9 @@ pub fn native_inference_status() -> NativeInferenceStatus {
         model: String::new(),
         runtime_sha256: String::new(),
         model_sha256: String::new(),
+        profile: String::new(),
+        effective_threads: 0,
+        max_tokens_cap: 0,
         reason: String::from(
           "Native CPU runtime binary not found. Configure MINDSCRIBE_NATIVE_CPU_RUNTIME or bundle llama-cli.exe.",
         ),
@@ -235,6 +334,9 @@ pub fn native_inference_status() -> NativeInferenceStatus {
         model: String::new(),
         runtime_sha256: String::new(),
         model_sha256: String::new(),
+        profile: String::new(),
+        effective_threads: 0,
+        max_tokens_cap: 0,
         reason: String::from(
           "Native CPU model file not found. Configure MINDSCRIBE_NATIVE_CPU_MODEL or bundle a GGUF model.",
         ),
@@ -251,6 +353,9 @@ pub fn native_inference_status() -> NativeInferenceStatus {
         model: model.to_string_lossy().to_string(),
         runtime_sha256: String::new(),
         model_sha256: String::new(),
+        profile: String::new(),
+        effective_threads: 0,
+        max_tokens_cap: 0,
         reason,
       }
     }
@@ -265,6 +370,9 @@ pub fn native_inference_status() -> NativeInferenceStatus {
         model: model.to_string_lossy().to_string(),
         runtime_sha256: runtime_hash,
         model_sha256: String::new(),
+        profile: String::new(),
+        effective_threads: 0,
+        max_tokens_cap: 0,
         reason,
       }
     }
@@ -277,6 +385,9 @@ pub fn native_inference_status() -> NativeInferenceStatus {
       model: model.to_string_lossy().to_string(),
       runtime_sha256: runtime_hash,
       model_sha256: model_hash,
+      profile: String::new(),
+      effective_threads: 0,
+      max_tokens_cap: 0,
       reason,
     };
   }
@@ -288,9 +399,14 @@ pub fn native_inference_status() -> NativeInferenceStatus {
       model: model.to_string_lossy().to_string(),
       runtime_sha256: runtime_hash,
       model_sha256: model_hash,
+      profile: String::new(),
+      effective_threads: 0,
+      max_tokens_cap: 0,
       reason,
     };
   }
+
+  let runtime_config = build_runtime_config(None, None);
 
   NativeInferenceStatus {
     available: true,
@@ -298,6 +414,9 @@ pub fn native_inference_status() -> NativeInferenceStatus {
     model: model.to_string_lossy().to_string(),
     runtime_sha256: runtime_hash,
     model_sha256: model_hash,
+    profile: profile_name(&runtime_config.profile),
+    effective_threads: runtime_config.threads,
+    max_tokens_cap: profile_token_cap(&runtime_config.profile),
     reason: String::new(),
   }
 }
@@ -322,17 +441,7 @@ pub fn native_inference_generate(
 
   let runtime = status.runtime;
   let model = status.model;
-  let max_predict = max_tokens.unwrap_or(256).clamp(16, 2048);
-  let temp = temperature.unwrap_or(0.7).clamp(0.0, 1.5);
-  let threads = env::var("MINDSCRIBE_NATIVE_CPU_THREADS")
-    .ok()
-    .and_then(|value| value.parse::<usize>().ok())
-    .filter(|value| *value > 0)
-    .unwrap_or_else(|| {
-      std::thread::available_parallelism()
-        .map(|value| value.get().min(8))
-        .unwrap_or(4)
-    });
+  let runtime_config = build_runtime_config(max_tokens, temperature);
 
   let mut cmd = Command::new(runtime);
   cmd
@@ -341,11 +450,11 @@ pub fn native_inference_generate(
     .arg("-p")
     .arg(prompt)
     .arg("-n")
-    .arg(max_predict.to_string())
+    .arg(runtime_config.max_tokens.to_string())
     .arg("--temp")
-    .arg(format!("{temp:.2}"))
+    .arg(format!("{:.2}", runtime_config.temperature))
     .arg("--threads")
-    .arg(threads.to_string())
+    .arg(runtime_config.threads.to_string())
     .stdout(Stdio::piped())
     .stderr(Stdio::piped());
 
@@ -411,17 +520,7 @@ pub fn native_inference_generate_stream(
 
   let runtime = status.runtime;
   let model = status.model;
-  let max_predict = max_tokens.unwrap_or(256).clamp(16, 2048);
-  let temp = temperature.unwrap_or(0.7).clamp(0.0, 1.5);
-  let threads = env::var("MINDSCRIBE_NATIVE_CPU_THREADS")
-    .ok()
-    .and_then(|value| value.parse::<usize>().ok())
-    .filter(|value| *value > 0)
-    .unwrap_or_else(|| {
-      std::thread::available_parallelism()
-        .map(|value| value.get().min(8))
-        .unwrap_or(4)
-    });
+  let runtime_config = build_runtime_config(max_tokens, temperature);
 
   let mut cmd = Command::new(runtime);
   cmd
@@ -430,11 +529,11 @@ pub fn native_inference_generate_stream(
     .arg("-p")
     .arg(prompt)
     .arg("-n")
-    .arg(max_predict.to_string())
+    .arg(runtime_config.max_tokens.to_string())
     .arg("--temp")
-    .arg(format!("{temp:.2}"))
+    .arg(format!("{:.2}", runtime_config.temperature))
     .arg("--threads")
-    .arg(threads.to_string())
+    .arg(runtime_config.threads.to_string())
     .stdout(Stdio::piped())
     .stderr(Stdio::piped());
 

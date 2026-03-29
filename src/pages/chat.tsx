@@ -261,6 +261,9 @@ export default function ChatPage() {
             <div className="mt-1 text-amber-100/90">{capabilityReason || 'Check WebGPU support or native CPU setup.'}</div>
             {nativeStatus && (
               <div className="mt-2 text-xs text-amber-100/80 space-y-1">
+                <div>Native profile: {nativeStatus.profile || 'N/A'}</div>
+                <div>Effective threads: {nativeStatus.effectiveThreads ?? 'N/A'}</div>
+                <div>Token cap: {nativeStatus.maxTokensCap ?? 'N/A'}</div>
                 <div>Native runtime: {nativeStatus.runtime || 'Not found'}</div>
                 <div>Native model: {nativeStatus.model || 'Not found'}</div>
                 <div>Runtime SHA-256: {nativeStatus.runtimeSha256 || 'Unavailable'}</div>
