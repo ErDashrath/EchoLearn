@@ -63,6 +63,13 @@ pub struct NativeRuntimeDownloadResult {
   pub size_bytes: u64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeDownloadsClearResult {
+  pub models_cleared: bool,
+  pub runtime_cleared: bool,
+}
+
 static ACTIVE_NATIVE_PID: OnceLock<Mutex<Option<u32>>> = OnceLock::new();
 
 enum NativeCpuProfile {
@@ -148,7 +155,7 @@ fn validated_download_url(raw_url: &str, label: &str) -> Result<String, String> 
 
 fn hashes_required() -> bool {
   env_flag("MINDSCRIBE_NATIVE_CPU_REQUIRE_HASHES")
-    .unwrap_or(!cfg!(debug_assertions))
+    .unwrap_or(false)
 }
 
 fn append_runtime_candidates_from_dir(candidates: &mut Vec<PathBuf>, root: &Path) {
@@ -235,6 +242,10 @@ fn dedupe_paths(paths: Vec<PathBuf>) -> Vec<PathBuf> {
     }
   }
   deduped
+}
+
+fn fallback_scan_enabled() -> bool {
+  env_flag("MINDSCRIBE_NATIVE_CPU_SCAN_FALLBACK").unwrap_or(false)
 }
 
 fn runtime_probe_score(path: &Path) -> i32 {
@@ -349,6 +360,10 @@ fn resolve_runtime_command(runtime_path: Option<&str>) -> Option<PathBuf> {
     }
   }
 
+  if !fallback_scan_enabled() {
+    return None;
+  }
+
   let candidates = native_runtime_candidates();
   let mut best: Option<(i32, PathBuf)> = None;
 
@@ -452,6 +467,10 @@ fn resolve_model_path(model_path: Option<&str>, preferred_model_id: Option<&str>
     if let Some(mapped) = resolve_model_path_from_map(preferred) {
       return Some(mapped);
     }
+  }
+
+  if !fallback_scan_enabled() {
+    return None;
   }
 
   let candidates = native_model_candidates();
@@ -602,12 +621,97 @@ fn runtime_help(runtime: &str) -> String {
   .to_ascii_lowercase()
 }
 
-fn append_native_gpu_args(cmd: &mut Command, runtime: &str, config: &NativeInferenceRuntimeConfig) {
+const NATIVE_USER_PROMPT_MAX_CHARS: usize = 1800;
+const NATIVE_SYSTEM_PROMPT_MAX_CHARS: usize = 4200;
+
+fn truncate_prompt_chars(value: &str, max_chars: usize) -> String {
+  let trimmed = value.trim();
+  if trimmed.is_empty() {
+    return String::new();
+  }
+
+  if trimmed.chars().count() <= max_chars {
+    return trimmed.to_string();
+  }
+
+  let keep = max_chars.saturating_sub(3);
+  let mut truncated: String = trimmed.chars().take(keep).collect();
+  if keep > 0 {
+    truncated.push_str("...");
+  }
+  truncated
+}
+
+fn append_native_output_args(cmd: &mut Command, help: &str, has_system_prompt: bool) {
+  if help.is_empty() {
+    return;
+  }
+
+  if help.contains("--simple-io") {
+    cmd.arg("--simple-io");
+  }
+
+  if help.contains("--log-disable") {
+    cmd.arg("--log-disable");
+  }
+
+  if help.contains("--no-display-prompt") {
+    cmd.arg("--no-display-prompt");
+  }
+
+  if help.contains("--no-show-timings") {
+    cmd.arg("--no-show-timings");
+  }
+
+  if has_system_prompt {
+    if help.contains("--conversation") {
+      cmd.arg("--conversation");
+    }
+
+    if help.contains("--single-turn") {
+      cmd.arg("--single-turn");
+    }
+  } else {
+    if help.contains("--no-conversation") {
+      cmd.arg("--no-conversation");
+    }
+
+    if help.contains("--single-turn") {
+      cmd.arg("--single-turn");
+    }
+  }
+}
+
+fn append_native_prompt_args(
+  cmd: &mut Command,
+  help: &str,
+  prompt: &str,
+  system_prompt: Option<&str>,
+) {
+  let prompt = prompt.trim();
+  let system_prompt = system_prompt.map(str::trim).filter(|value| !value.is_empty());
+
+  if let Some(system_prompt) = system_prompt {
+    let mirrored_prompt = format!("System:\n{}\n\nUser:\n{}\n\nAssistant:", system_prompt, prompt);
+
+    if help.contains("--system-prompt") {
+      cmd.arg("--system-prompt").arg(system_prompt);
+      cmd.arg("-p").arg(mirrored_prompt);
+      return;
+    }
+
+    cmd.arg("-p").arg(mirrored_prompt);
+    return;
+  }
+
+  cmd.arg("-p").arg(prompt);
+}
+
+fn append_native_gpu_args(cmd: &mut Command, help: &str, config: &NativeInferenceRuntimeConfig) {
   let Some(gpu_layers) = config.gpu_layers else {
     return;
   };
 
-  let help = runtime_help(runtime);
   if help.is_empty() {
     return;
   }
@@ -694,6 +798,10 @@ fn verify_hash_if_required(label: &str, actual: &str, expected: Option<String>) 
   verify_hash(label, actual, expected)
 }
 
+fn should_validate_integrity_hashes() -> bool {
+  hashes_required() || expected_runtime_hash().is_some() || expected_model_hash().is_some()
+}
+
 fn emit_stream_chunk(
   app: &tauri::AppHandle,
   request_id: &str,
@@ -709,6 +817,30 @@ fn emit_stream_chunk(
   };
 
   let _ = app.emit("native-inference-stream", payload);
+}
+
+fn find_cli_footer_index(text: &str) -> Option<usize> {
+  let lower = text.to_ascii_lowercase();
+
+  let mut indexes = Vec::new();
+
+  if let Some(index) = lower.find("[ prompt:") {
+    indexes.push(index);
+  }
+
+  if let Some(index) = lower.find("\navailable commands:") {
+    indexes.push(index);
+  }
+
+  if let Some(index) = lower.rfind("\n>") {
+    indexes.push(index);
+  }
+
+  if lower.trim_end() == ">" {
+    indexes.push(text.trim_end_matches(char::is_whitespace).len().saturating_sub(1));
+  }
+
+  indexes.into_iter().min()
 }
 
 fn sanitize_filename(value: &str) -> String {
@@ -1082,6 +1214,45 @@ pub fn native_inference_download_runtime(
 }
 
 #[tauri::command]
+pub fn native_inference_clear_downloads(
+  app: tauri::AppHandle,
+  clear_runtime: Option<bool>,
+  clear_models: Option<bool>,
+) -> Result<NativeDownloadsClearResult, String> {
+  let clear_runtime = clear_runtime.unwrap_or(true);
+  let clear_models = clear_models.unwrap_or(true);
+
+  let app_data_dir = app
+    .path()
+    .app_data_dir()
+    .map_err(|error| format!("failed to resolve app data directory: {error}"))?;
+
+  let llm_dir = app_data_dir.join("llm");
+  let runtime_dir = llm_dir.join("runtime");
+  let models_dir = llm_dir.join("models");
+
+  let mut runtime_cleared = false;
+  let mut models_cleared = false;
+
+  if clear_runtime && runtime_dir.exists() {
+    fs::remove_dir_all(&runtime_dir)
+      .map_err(|error| format!("failed to clear runtime directory {}: {error}", runtime_dir.display()))?;
+    runtime_cleared = true;
+  }
+
+  if clear_models && models_dir.exists() {
+    fs::remove_dir_all(&models_dir)
+      .map_err(|error| format!("failed to clear model directory {}: {error}", models_dir.display()))?;
+    models_cleared = true;
+  }
+
+  Ok(NativeDownloadsClearResult {
+    models_cleared,
+    runtime_cleared,
+  })
+}
+
+#[tauri::command]
 pub fn native_inference_status(
   model_id: Option<String>,
   model_path: Option<String>,
@@ -1151,70 +1322,75 @@ pub fn native_inference_status(
     }
   };
 
-  let runtime_hash = match compute_sha256(&runtime) {
-    Ok(hash) => hash,
-    Err(reason) => {
-      return NativeInferenceStatus {
-        available: false,
-        runtime: runtime.to_string_lossy().to_string(),
-        model: model.to_string_lossy().to_string(),
-        selected_model_id,
-        runtime_sha256: String::new(),
-        model_sha256: String::new(),
-        profile: String::new(),
-        effective_threads: 0,
-        max_tokens_cap: 0,
-        reason,
-      }
-    }
-  };
+  let mut runtime_hash = String::new();
+  let mut model_hash = String::new();
 
-  let model_hash = match compute_sha256(&model) {
-    Ok(hash) => hash,
-    Err(reason) => {
+  if should_validate_integrity_hashes() {
+    runtime_hash = match compute_sha256(&runtime) {
+      Ok(hash) => hash,
+      Err(reason) => {
+        return NativeInferenceStatus {
+          available: false,
+          runtime: runtime.to_string_lossy().to_string(),
+          model: model.to_string_lossy().to_string(),
+          selected_model_id,
+          runtime_sha256: String::new(),
+          model_sha256: String::new(),
+          profile: String::new(),
+          effective_threads: 0,
+          max_tokens_cap: 0,
+          reason,
+        }
+      }
+    };
+
+    model_hash = match compute_sha256(&model) {
+      Ok(hash) => hash,
+      Err(reason) => {
+        return NativeInferenceStatus {
+          available: false,
+          runtime: runtime.to_string_lossy().to_string(),
+          model: model.to_string_lossy().to_string(),
+          selected_model_id,
+          runtime_sha256: runtime_hash,
+          model_sha256: String::new(),
+          profile: String::new(),
+          effective_threads: 0,
+          max_tokens_cap: 0,
+          reason,
+        }
+      }
+    };
+
+    if let Err(reason) = verify_hash_if_required("runtime", &runtime_hash, expected_runtime_hash()) {
       return NativeInferenceStatus {
         available: false,
         runtime: runtime.to_string_lossy().to_string(),
         model: model.to_string_lossy().to_string(),
         selected_model_id,
         runtime_sha256: runtime_hash,
-        model_sha256: String::new(),
+        model_sha256: model_hash,
         profile: String::new(),
         effective_threads: 0,
         max_tokens_cap: 0,
         reason,
-      }
+      };
     }
-  };
 
-  if let Err(reason) = verify_hash_if_required("runtime", &runtime_hash, expected_runtime_hash()) {
-    return NativeInferenceStatus {
-      available: false,
-      runtime: runtime.to_string_lossy().to_string(),
-      model: model.to_string_lossy().to_string(),
-      selected_model_id,
-      runtime_sha256: runtime_hash,
-      model_sha256: model_hash,
-      profile: String::new(),
-      effective_threads: 0,
-      max_tokens_cap: 0,
-      reason,
-    };
-  }
-
-  if let Err(reason) = verify_hash_if_required("model", &model_hash, expected_model_hash()) {
-    return NativeInferenceStatus {
-      available: false,
-      runtime: runtime.to_string_lossy().to_string(),
-      model: model.to_string_lossy().to_string(),
-      selected_model_id,
-      runtime_sha256: runtime_hash,
-      model_sha256: model_hash,
-      profile: String::new(),
-      effective_threads: 0,
-      max_tokens_cap: 0,
-      reason,
-    };
+    if let Err(reason) = verify_hash_if_required("model", &model_hash, expected_model_hash()) {
+      return NativeInferenceStatus {
+        available: false,
+        runtime: runtime.to_string_lossy().to_string(),
+        model: model.to_string_lossy().to_string(),
+        selected_model_id,
+        runtime_sha256: runtime_hash,
+        model_sha256: model_hash,
+        profile: String::new(),
+        effective_threads: 0,
+        max_tokens_cap: 0,
+        reason,
+      };
+    }
   }
 
   let runtime_config = build_runtime_config(None, None);
@@ -1239,12 +1415,22 @@ pub fn native_inference_generate(
   model_id: Option<String>,
   model_path: Option<String>,
   runtime_path: Option<String>,
+  system_prompt: Option<String>,
   max_tokens: Option<u32>,
   temperature: Option<f32>,
 ) -> Result<String, String> {
   if prompt.trim().is_empty() {
     return Err(String::from("Prompt cannot be empty."));
   }
+
+  let prompt = truncate_prompt_chars(&prompt, NATIVE_USER_PROMPT_MAX_CHARS);
+  if prompt.is_empty() {
+    return Err(String::from("Prompt cannot be empty."));
+  }
+
+  let system_prompt = system_prompt
+    .map(|value| truncate_prompt_chars(&value, NATIVE_SYSTEM_PROMPT_MAX_CHARS))
+    .filter(|value| !value.is_empty());
 
   let status = native_inference_status(model_id, model_path, runtime_path);
   if !status.available {
@@ -1254,13 +1440,14 @@ pub fn native_inference_generate(
   let runtime = status.runtime;
   let model = status.model;
   let runtime_config = build_runtime_config(max_tokens, temperature);
+  let help = runtime_help(&runtime);
 
   let mut cmd = Command::new(&runtime);
+  cmd.arg("-m").arg(model);
+
+  append_native_prompt_args(&mut cmd, &help, &prompt, system_prompt.as_deref());
+
   cmd
-    .arg("-m")
-    .arg(model)
-    .arg("-p")
-    .arg(prompt)
     .arg("-n")
     .arg(runtime_config.max_tokens.to_string())
     .arg("--temp")
@@ -1268,7 +1455,8 @@ pub fn native_inference_generate(
     .arg("--threads")
     .arg(runtime_config.threads.to_string());
 
-  append_native_gpu_args(&mut cmd, &runtime, &runtime_config);
+  append_native_output_args(&mut cmd, &help, system_prompt.is_some());
+  append_native_gpu_args(&mut cmd, &help, &runtime_config);
 
   cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
@@ -1323,12 +1511,22 @@ pub fn native_inference_generate_stream(
   model_id: Option<String>,
   model_path: Option<String>,
   runtime_path: Option<String>,
+  system_prompt: Option<String>,
   max_tokens: Option<u32>,
   temperature: Option<f32>,
 ) -> Result<bool, String> {
   if prompt.trim().is_empty() {
     return Err(String::from("Prompt cannot be empty."));
   }
+
+  let prompt = truncate_prompt_chars(&prompt, NATIVE_USER_PROMPT_MAX_CHARS);
+  if prompt.is_empty() {
+    return Err(String::from("Prompt cannot be empty."));
+  }
+
+  let system_prompt = system_prompt
+    .map(|value| truncate_prompt_chars(&value, NATIVE_SYSTEM_PROMPT_MAX_CHARS))
+    .filter(|value| !value.is_empty());
 
   let runtime = resolve_runtime_command(runtime_path.as_deref())
     .ok_or_else(|| String::from("Native CPU runtime binary not found."))?
@@ -1347,13 +1545,14 @@ pub fn native_inference_generate_stream(
   .to_string_lossy()
   .to_string();
   let runtime_config = build_runtime_config(max_tokens, temperature);
+  let help = runtime_help(&runtime);
 
   let mut cmd = Command::new(&runtime);
+  cmd.arg("-m").arg(model);
+
+  append_native_prompt_args(&mut cmd, &help, &prompt, system_prompt.as_deref());
+
   cmd
-    .arg("-m")
-    .arg(model)
-    .arg("-p")
-    .arg(prompt)
     .arg("-n")
     .arg(runtime_config.max_tokens.to_string())
     .arg("--temp")
@@ -1361,7 +1560,8 @@ pub fn native_inference_generate_stream(
     .arg("--threads")
     .arg(runtime_config.threads.to_string());
 
-  append_native_gpu_args(&mut cmd, &runtime, &runtime_config);
+  append_native_output_args(&mut cmd, &help, system_prompt.is_some());
+  append_native_gpu_args(&mut cmd, &help, &runtime_config);
 
   cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
@@ -1390,6 +1590,9 @@ pub fn native_inference_generate_stream(
   let app_handle = app.clone();
   thread::spawn(move || {
     let mut buffer = [0u8; 512];
+    let mut auto_completed = false;
+    let mut combined_output = String::new();
+    let mut emitted_bytes = 0usize;
 
     loop {
       match stdout.read(&mut buffer) {
@@ -1397,7 +1600,28 @@ pub fn native_inference_generate_stream(
         Ok(count) => {
           let chunk = String::from_utf8_lossy(&buffer[..count]).to_string();
           if !chunk.is_empty() {
-            emit_stream_chunk(&app_handle, &request_id, &chunk, false, None);
+            combined_output.push_str(&chunk);
+
+            if let Some(footer_index) = find_cli_footer_index(&combined_output) {
+              if footer_index > emitted_bytes {
+                let visible_chunk = &combined_output[emitted_bytes..footer_index];
+                if !visible_chunk.is_empty() {
+                  emit_stream_chunk(&app_handle, &request_id, visible_chunk, false, None);
+                }
+              }
+
+              auto_completed = true;
+              let _ = child.kill();
+              break;
+            }
+
+            if combined_output.len() > emitted_bytes {
+              let visible_chunk = &combined_output[emitted_bytes..];
+              if !visible_chunk.is_empty() {
+                emit_stream_chunk(&app_handle, &request_id, visible_chunk, false, None);
+              }
+              emitted_bytes = combined_output.len();
+            }
           }
         }
         Err(error) => {
@@ -1431,7 +1655,7 @@ pub fn native_inference_generate_stream(
         emit_stream_chunk(&app_handle, &request_id, "", true, None);
       }
       Ok(_) => {
-        if stderr_text.trim().is_empty() {
+        if auto_completed || stderr_text.trim().is_empty() {
           emit_stream_chunk(&app_handle, &request_id, "", true, None);
         } else {
           emit_stream_chunk(
@@ -1560,5 +1784,11 @@ mod tests {
     assert!(output_has_nvidia_gpu("NVIDIA GeForce RTX 3060"));
     assert!(output_has_nvidia_gpu("name\r\nNVIDIA RTX A4000"));
     assert!(!output_has_nvidia_gpu("Intel(R) UHD Graphics"));
+  }
+
+  #[test]
+  fn fallback_scan_is_disabled_by_default() {
+    assert_eq!(env_flag("MINDSCRIBE_NATIVE_CPU_SCAN_FALLBACK"), None);
+    assert!(!fallback_scan_enabled());
   }
 }

@@ -161,9 +161,32 @@ export function ModelDownloadPanel({
 
   const handleClearCache = async () => {
     if (confirm('Clear all downloaded models? This will free up storage space.')) {
-      webllmService.clearModelCache();
-      setCachedModels([]);
-      setActiveModel(null);
+      setDownloadingModel('__clearing__');
+      setDownloadProgress({ progress: 0, text: 'Clearing downloaded model caches...' });
+
+      try {
+        await webllmService.clearModelCache();
+        modelVariantService.clearNativePaths();
+        await nativeCpuInferenceService.clearDownloads(true, true);
+
+        setCachedModels([]);
+        setActiveModel(null);
+
+        toast({
+          title: 'Model cache cleared',
+          description: 'WebLLM and native model/runtime downloads were removed.',
+        });
+      } catch (error) {
+        console.error('Failed to clear model cache:', error);
+        toast({
+          title: 'Failed to clear cache',
+          description: 'Some model files may still be in use. Close other app windows and retry.',
+          variant: 'destructive',
+        });
+      } finally {
+        setDownloadingModel(null);
+        setDownloadProgress(null);
+      }
     }
   };
 

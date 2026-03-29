@@ -19,6 +19,19 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useLocation } from 'wouter';
 import { mentalHealthPromptService } from '@/services/mental-health-prompt-service';
 import { deviceMemoryService } from '@/services/device-memory-service';
+import {
+  inferenceRuntimeService,
+  type InferenceProviderId,
+  type InferenceSelectionMode,
+  type InferenceRuntimeCapabilities,
+} from '@/services/inference-runtime-service';
+import { nativeCpuInferenceService } from '@/services/native-cpu-inference-service';
+import { modelVariantService } from '@/services/model-variant-service';
+import {
+  buildTrimmedConversationHistory,
+  composeTurnPrompts,
+  getRecommendedContextBudget,
+} from '@/services/llm-prompt-service';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -198,6 +211,11 @@ const VoiceTherapyPage: React.FC = () => {
 
   // WebLLM state
   const [llmLoaded, setLlmLoaded] = useState(false);
+  const [inferenceSelectionMode] = useState<InferenceSelectionMode>(() => inferenceRuntimeService.getSelectionMode());
+  const [activeInferenceProvider, setActiveInferenceProvider] = useState<InferenceProviderId | null>(null);
+  const [inferenceCapabilities, setInferenceCapabilities] =
+    useState<InferenceRuntimeCapabilities | null>(null);
+  const capabilitiesRefreshInFlightRef = useRef(false);
 
   // Voice hook
   const {
@@ -233,6 +251,9 @@ const VoiceTherapyPage: React.FC = () => {
 
   const runVoiceDiagnostics = useCallback(async () => {
     setDiagnosticsRunning(true);
+
+    const providerRequiresWebLlm = activeInferenceProvider === 'webllm-webgpu';
+    const providerReady = !!activeInferenceProvider && (!providerRequiresWebLlm || llmLoaded);
 
     const checks: Array<{ label: string; url: string; timeoutMs?: number }> = [
       { label: 'Piper phonemizer JS', url: '/wasm/piper/piper_phonemize.js' },
@@ -292,11 +313,15 @@ const VoiceTherapyPage: React.FC = () => {
     );
 
     results.unshift({
-      label: 'WebLLM model loaded',
-      ok: llmLoaded,
-      detail: llmLoaded
-        ? 'Loaded (voice interaction enabled)'
-        : 'Not loaded (voice action button remains disabled)',
+      label: 'Inference readiness',
+      ok: providerReady,
+      detail: activeInferenceProvider
+        ? providerRequiresWebLlm
+          ? (llmLoaded
+            ? 'WebLLM provider ready (model loaded)'
+            : 'WebLLM provider selected but no model loaded')
+          : `Ready via ${activeInferenceProvider}`
+        : 'No provider available for current inference selection',
     });
 
     results.unshift({
@@ -307,7 +332,7 @@ const VoiceTherapyPage: React.FC = () => {
 
     setVoiceDiagnostics(results);
     setDiagnosticsRunning(false);
-  }, [isLoading, llmLoaded, loadProgress]);
+  }, [activeInferenceProvider, isLoading, llmLoaded, loadProgress]);
 
   useEffect(() => {
     if (voiceDiagnostics.length === 0) {
@@ -385,6 +410,112 @@ const VoiceTherapyPage: React.FC = () => {
     return output;
   };
 
+  const resolveVoiceModelId = useCallback((): string | null => {
+    const direct = webllmService.getCurrentModel() || webllmService.getActiveModel();
+    if (direct) {
+      return direct;
+    }
+
+    const fastestCached = webllmService.getFastestCachedModelId();
+    if (fastestCached) {
+      return fastestCached;
+    }
+
+    const cachedModels = webllmService.getCachedModels();
+    if (cachedModels.length > 0) {
+      return cachedModels[0];
+    }
+
+    const availableModels = webllmService.getAvailableModels();
+    return availableModels[0]?.id ?? null;
+  }, []);
+
+  const stripNativeVoiceArtifacts = (raw: string): string =>
+    raw
+      .replace(/\x1b\[[0-9;]*m/g, '')
+      .replace(/\r/g, '')
+      .split('\n')
+      .filter((line) => {
+        const trimmed = line.trim();
+        if (!trimmed) {
+          return true;
+        }
+
+        const lower = trimmed.toLowerCase();
+        if (lower.startsWith('load_backend:')) return false;
+        if (lower.startsWith('loading model')) return false;
+        if (lower.startsWith('available commands:')) return false;
+        if (lower.startsWith('/exit') || lower.startsWith('/regen') || lower.startsWith('/clear')) return false;
+        if (lower.startsWith('build') || lower.startsWith('model') || lower.startsWith('modalities')) return false;
+        if (lower.startsWith('system:') || lower.startsWith('user:') || lower.startsWith('assistant:')) return false;
+        if (trimmed === '>') return false;
+        return true;
+      })
+      .join('\n')
+      .trim();
+
+  const enforceMindScribeIdentity = (raw: string): string => {
+    let text = raw.trim();
+    if (!text) {
+      return text;
+    }
+
+    if (!/(qwen|alibaba cloud|alibaba)/i.test(text)) {
+      return text;
+    }
+
+    text = text.replace(/\b(qwen|alibaba cloud|alibaba)\b/gi, 'MindScribe');
+    text = text.replace(
+      /\b(i am|i'm)\s+mindscribe,?\s+a\s+(large\s+language\s+model|language model)[^.]*\./i,
+      'I am MindScribe, your privacy-first mental health companion.',
+    );
+
+    return text.trim();
+  };
+
+  useEffect(() => {
+    let mounted = true;
+
+    const refreshCapabilities = async () => {
+      if (capabilitiesRefreshInFlightRef.current) {
+        return;
+      }
+
+      capabilitiesRefreshInFlightRef.current = true;
+      try {
+        const activeModelId = resolveVoiceModelId();
+        const mappedNativeModelPath =
+          modelVariantService.getNativeModelPath(activeModelId)
+          || modelVariantService.getAnyNativeModelPath();
+        const mappedNativeRuntimePath = modelVariantService.getNativeRuntimePath();
+
+        const capabilities = await inferenceRuntimeService.getCapabilities(
+          activeModelId ?? undefined,
+          mappedNativeModelPath,
+          mappedNativeRuntimePath,
+        );
+
+        if (!mounted) {
+          return;
+        }
+
+        const provider = inferenceRuntimeService.resolveProvider(capabilities, inferenceSelectionMode);
+        setInferenceCapabilities(capabilities);
+        setActiveInferenceProvider(provider);
+      } finally {
+        capabilitiesRefreshInFlightRef.current = false;
+      }
+    };
+
+    void refreshCapabilities();
+    const interval = setInterval(refreshCapabilities, 60000);
+
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [inferenceSelectionMode, resolveVoiceModelId]);
+
   // Process user speech and get AI response
   const processUserSpeech = useCallback(async (userText: string) => {
     if (!userText.trim()) return;
@@ -399,6 +530,28 @@ const VoiceTherapyPage: React.FC = () => {
     try {
       const distressMode = isDistressIntent(userText);
       const quickReply = distressMode ? null : getQuickCasualReply(userText);
+      const activeModelId = resolveVoiceModelId();
+      const mappedNativeModelPath =
+        modelVariantService.getNativeModelPath(activeModelId)
+        || modelVariantService.getAnyNativeModelPath();
+      const mappedNativeRuntimePath = modelVariantService.getNativeRuntimePath();
+      const capabilities = await inferenceRuntimeService.getCapabilities(
+        activeModelId ?? undefined,
+        mappedNativeModelPath,
+        mappedNativeRuntimePath,
+      );
+      const selectedProvider = inferenceRuntimeService.resolveProvider(capabilities, inferenceSelectionMode);
+      if (!selectedProvider) {
+        throw new Error(
+          inferenceRuntimeService.getUnavailableReason(capabilities, inferenceSelectionMode)
+            || 'No compatible inference provider is available.',
+        );
+      }
+
+      setInferenceCapabilities(capabilities);
+      setActiveInferenceProvider(selectedProvider);
+
+      const contextBudget = getRecommendedContextBudget(activeModelId, selectedProvider);
       const directMemoryAnswer = user?.username
         ? await deviceMemoryService.answerFactQuestion(user.username, userText)
         : null;
@@ -406,11 +559,26 @@ const VoiceTherapyPage: React.FC = () => {
         ? await deviceMemoryService.buildContextForTurn({
             userId: user.username,
             query: userText,
+            recentMessages: conversation
+              .slice(-8)
+              .map((message, index) => ({
+                id: `${message.role}-${index}`,
+                role: message.role === 'ai' ? 'assistant' : 'user',
+                content: message.text,
+                timestamp: new Date().toISOString(),
+              })),
             limit: 6,
+            modelContextTokens: contextBudget.modelContextTokens,
+            reservedResponseTokens: contextBudget.reservedResponseTokens,
+            charsPerToken: 4,
+            enableSemantic: true,
+            enableReranker: true,
           })
         : { prompt: '', items: [] };
 
-      const systemPrompt = mentalHealthPromptService.composePrompt({
+      const promptPack = composeTurnPrompts({
+        provider: selectedProvider,
+        modelId: activeModelId,
         context: {
           userName: user?.username || user?.name,
           dass21Results,
@@ -419,32 +587,75 @@ const VoiceTherapyPage: React.FC = () => {
         userMessage: userText,
         retrievedMemoryPrompt: retrievedContext.prompt,
         forceCasualCompanionMode: !distressMode,
+        budget: {
+          modelContextTokens: contextBudget.modelContextTokens,
+          reservedResponseTokens: contextBudget.reservedResponseTokens,
+          maxInputTokens: contextBudget.maxInputTokens,
+        },
       });
+      const systemPrompt = promptPack.systemPrompt;
+      const modelUserPrompt = promptPack.userPrompt;
 
       // Generate AI response using webllmService async generator
       let aiResponse = directMemoryAnswer || quickReply || '';
       if (!directMemoryAnswer && !quickReply) {
-        const recentConversationHistory = conversation.slice(-4).map((message) => ({
-          role: message.role === 'user' ? 'user' : 'assistant',
-          content: message.text,
-        }));
-
-        const generator = webllmService.generateResponse(
-          [...recentConversationHistory, { role: 'user', content: userText }],
-          webllmService.getOptimizedGenerationConfig(
-            distressMode
-            ? { maxTokens: 80, temperature: 0.55, topP: 0.9 }
-            : { maxTokens: 56, temperature: 0.7, topP: 0.92 },
-            { task: 'voice' },
-          ),
-          systemPrompt
+        const recentConversationHistory = buildTrimmedConversationHistory(
+          conversation.map((message) => ({
+            role: message.role === 'user' ? 'user' : 'assistant',
+            content: message.text,
+          })),
+          {
+            maxTurns: 4,
+            maxCharsPerMessage: 220,
+          },
         );
 
-        for await (const token of generator) {
-          if (stopRequestedRef.current || requestId !== activeRequestIdRef.current) {
-            break;
+        const generationConfig = webllmService.getOptimizedGenerationConfig(
+          distressMode
+            ? { maxTokens: 80, temperature: 0.55, topP: 0.9 }
+            : { maxTokens: 56, temperature: 0.7, topP: 0.92 },
+          { task: 'voice', modelId: activeModelId },
+        );
+
+        if (selectedProvider === 'native-cpu') {
+          const stream = nativeCpuInferenceService.generateStream(modelUserPrompt, {
+            modelId: activeModelId ?? undefined,
+            modelPath: mappedNativeModelPath,
+            runtimePath: mappedNativeRuntimePath,
+            systemPrompt,
+            maxTokens: generationConfig.maxTokens,
+            temperature: generationConfig.temperature,
+          });
+
+          for await (const token of stream) {
+            if (stopRequestedRef.current || requestId !== activeRequestIdRef.current) {
+              break;
+            }
+            aiResponse += token;
           }
-          aiResponse += token;
+
+          aiResponse = enforceMindScribeIdentity(stripNativeVoiceArtifacts(aiResponse));
+        } else {
+          if (activeModelId && webllmService.isModelCached(activeModelId) && !webllmService.isModelLoaded()) {
+            await webllmService.loadModel(activeModelId);
+          }
+
+          if (!webllmService.isModelLoaded()) {
+            throw new Error('WebLLM model is not loaded. Load a WebLLM model or switch inference mode.');
+          }
+
+          const generator = webllmService.generateResponse(
+            [...recentConversationHistory, { role: 'user', content: modelUserPrompt }],
+            generationConfig,
+            systemPrompt,
+          );
+
+          for await (const token of generator) {
+            if (stopRequestedRef.current || requestId !== activeRequestIdRef.current) {
+              break;
+            }
+            aiResponse += token;
+          }
         }
       }
 
@@ -480,7 +691,19 @@ const VoiceTherapyPage: React.FC = () => {
         setIsProcessing(false);
       }
     }
-  }, [speak, speed, dass21Results, continuousMode, continuousSessionActive, startListening, user?.username, conversation]);
+  }, [
+    speak,
+    speed,
+    dass21Results,
+    continuousMode,
+    continuousSessionActive,
+    startListening,
+    user?.username,
+    user?.name,
+    conversation,
+    inferenceSelectionMode,
+    resolveVoiceModelId,
+  ]);
 
   // Handle push-to-talk
   const handlePushToTalk = async () => {
@@ -527,6 +750,7 @@ const VoiceTherapyPage: React.FC = () => {
       autoRearmTimeoutRef.current = null;
     }
     await webllmService.stopGeneration();
+    await nativeCpuInferenceService.stop();
     await stopListening();
     stopSpeaking();
     setContinuousSessionActive(false);
@@ -679,6 +903,12 @@ const VoiceTherapyPage: React.FC = () => {
     return 'idle';
   };
 
+  const requiresWebLlmModel = activeInferenceProvider === 'webllm-webgpu';
+  const canInfer = !!activeInferenceProvider && (!requiresWebLlmModel || llmLoaded);
+  const unavailableReason = inferenceCapabilities
+    ? inferenceRuntimeService.getUnavailableReason(inferenceCapabilities, inferenceSelectionMode)
+    : null;
+
   // ==========================================================================
   // RENDER
   // ==========================================================================
@@ -722,10 +952,21 @@ const VoiceTherapyPage: React.FC = () => {
           
           {/* Status badges */}
           <div className="flex items-center justify-center gap-2 mt-4">
-            {!llmLoaded && (
+            {requiresWebLlmModel && !llmLoaded && (
               <Badge variant="outline" className="bg-yellow-500/10 text-yellow-400 border-yellow-500/30">
                 <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                 Load a model in Chat first
+              </Badge>
+            )}
+            {activeInferenceProvider && (
+              <Badge variant="outline" className="bg-slate-500/10 text-slate-300 border-slate-500/30">
+                Inference: {activeInferenceProvider} ({inferenceSelectionMode})
+              </Badge>
+            )}
+            {!activeInferenceProvider && unavailableReason && (
+              <Badge variant="outline" className="bg-red-500/10 text-red-400 border-red-500/30">
+                <AlertCircle className="h-3 w-3 mr-1" />
+                {unavailableReason}
               </Badge>
             )}
             {dass21Results && (
@@ -873,7 +1114,7 @@ const VoiceTherapyPage: React.FC = () => {
                       }
                     }
                   } : undefined}
-                  disabled={!llmLoaded || isLoading}
+                  disabled={!canInfer || isLoading}
                   className={cn(
                     "w-24 h-24 rounded-full flex items-center justify-center transition-all duration-300",
                     "shadow-lg shadow-purple-500/20",
@@ -886,7 +1127,7 @@ const VoiceTherapyPage: React.FC = () => {
                         : isLoading || isTranscribing
                           ? "bg-indigo-600"
                           : "bg-slate-700 hover:bg-slate-600",
-                    (!llmLoaded || isLoading) && "opacity-50 cursor-not-allowed"
+                    (!canInfer || isLoading) && "opacity-50 cursor-not-allowed"
                   )}
                 >
                   {isLoading ? (

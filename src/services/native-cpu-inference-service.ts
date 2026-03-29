@@ -18,6 +18,7 @@ export interface NativeCpuInferenceOptions {
   modelId?: string;
   modelPath?: string;
   runtimePath?: string;
+  systemPrompt?: string;
   maxTokens?: number;
   temperature?: number;
 }
@@ -42,7 +43,32 @@ export interface NativeCpuRuntimeDownloadResult {
   sizeBytes: number;
 }
 
+export interface NativeCpuDownloadsClearResult {
+  modelsCleared: boolean;
+  runtimeCleared: boolean;
+}
+
 class NativeCpuInferenceService {
+  private static readonly STREAM_IDLE_TIMEOUT_MS = 3000;
+  private static readonly STREAM_START_TIMEOUT_LIMIT = 4;
+
+  private async withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    try {
+      return await Promise.race<T>([
+        promise,
+        new Promise<T>((resolve) => {
+          timeoutId = setTimeout(() => resolve(fallback), timeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    }
+  }
+
   private isTauriRuntime(): boolean {
     return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
   }
@@ -57,11 +83,19 @@ class NativeCpuInferenceService {
     }
 
     try {
-      return await invoke<NativeCpuInferenceStatus>('native_inference_status', {
-        modelId,
-        modelPath,
-        runtimePath,
-      });
+      return await this.withTimeout(
+        invoke<NativeCpuInferenceStatus>('native_inference_status', {
+          modelId,
+          modelPath,
+          runtimePath,
+        }),
+        2500,
+        {
+          available: false,
+          runtime: '',
+          reason: 'Native CPU status check timed out.',
+        },
+      );
     } catch (error) {
       return {
         available: false,
@@ -81,6 +115,7 @@ class NativeCpuInferenceService {
       modelId: options.modelId,
       modelPath: options.modelPath,
       runtimePath: options.runtimePath,
+      systemPrompt: options.systemPrompt,
       maxTokens: options.maxTokens,
       temperature: options.temperature,
     });
@@ -99,6 +134,8 @@ class NativeCpuInferenceService {
     let done = false;
     let streamError: Error | null = null;
     let wake: (() => void) | null = null;
+    let sawAnyChunk = false;
+    let streamStartTimeouts = 0;
 
     const notify = () => {
       if (wake) {
@@ -118,6 +155,7 @@ class NativeCpuInferenceService {
 
         if (payload.chunk) {
           queue.push(payload.chunk);
+          sawAnyChunk = true;
         }
 
         if (payload.error) {
@@ -138,6 +176,7 @@ class NativeCpuInferenceService {
         modelId: options.modelId,
         modelPath: options.modelPath,
         runtimePath: options.runtimePath,
+        systemPrompt: options.systemPrompt,
         maxTokens: options.maxTokens,
         temperature: options.temperature,
       });
@@ -152,9 +191,40 @@ class NativeCpuInferenceService {
           throw streamError;
         }
 
-        await new Promise<void>((resolve) => {
-          wake = resolve;
+        const idleTimedOut = await new Promise<boolean>((resolve) => {
+          let settled = false;
+          const timeoutId = setTimeout(() => {
+            if (settled) {
+              return;
+            }
+            settled = true;
+            wake = null;
+            resolve(true);
+          }, NativeCpuInferenceService.STREAM_IDLE_TIMEOUT_MS);
+
+          wake = () => {
+            if (settled) {
+              return;
+            }
+            settled = true;
+            clearTimeout(timeoutId);
+            wake = null;
+            resolve(false);
+          };
         });
+
+        if (idleTimedOut && !done && queue.length === 0) {
+          if (sawAnyChunk) {
+            done = true;
+            await this.stop();
+            break;
+          }
+
+          streamStartTimeouts += 1;
+          if (streamStartTimeouts >= NativeCpuInferenceService.STREAM_START_TIMEOUT_LIMIT) {
+            throw new Error('Native CPU generation timed out before response started.');
+          }
+        }
       }
 
       if (streamError) {
@@ -183,7 +253,11 @@ class NativeCpuInferenceService {
     }
 
     try {
-      return await invoke<boolean>('native_inference_has_nvidia_gpu');
+      return await this.withTimeout(
+        invoke<boolean>('native_inference_has_nvidia_gpu'),
+        1500,
+        false,
+      );
     } catch {
       return false;
     }
@@ -208,6 +282,24 @@ class NativeCpuInferenceService {
     return invoke<NativeCpuRuntimeDownloadResult>('native_inference_download_runtime', {
       runtimeUrl,
     });
+  }
+
+  async clearDownloads(clearRuntime = true, clearModels = true): Promise<NativeCpuDownloadsClearResult | null> {
+    if (!this.isTauriRuntime()) {
+      return null;
+    }
+
+    return this.withTimeout(
+      invoke<NativeCpuDownloadsClearResult>('native_inference_clear_downloads', {
+        clearRuntime,
+        clearModels,
+      }),
+      4000,
+      {
+        modelsCleared: false,
+        runtimeCleared: false,
+      },
+    );
   }
 }
 

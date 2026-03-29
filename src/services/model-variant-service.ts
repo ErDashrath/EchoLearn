@@ -74,6 +74,18 @@ class ModelVariantService {
     return undefined;
   }
 
+  getAnyNativeModelPath(): string | undefined {
+    const map = this.getNativeModelMap();
+    for (const value of Object.values(map)) {
+      const trimmed = value.trim();
+      if (trimmed) {
+        return trimmed;
+      }
+    }
+
+    return undefined;
+  }
+
   setNativeModelPath(modelId: string, modelPath: string): void {
     if (!modelId || !modelPath) {
       return;
@@ -82,6 +94,10 @@ class ModelVariantService {
     const current = this.getNativeModelMap();
     current[modelId] = modelPath;
     localStorage.setItem(MODEL_MAP_STORAGE_KEY, JSON.stringify(current));
+  }
+
+  clearNativeModelMap(): void {
+    localStorage.removeItem(MODEL_MAP_STORAGE_KEY);
   }
 
   getNativeRuntimePath(): string | undefined {
@@ -94,6 +110,15 @@ class ModelVariantService {
       return;
     }
     localStorage.setItem(RUNTIME_PATH_STORAGE_KEY, runtimePath.trim());
+  }
+
+  clearNativeRuntimePath(): void {
+    localStorage.removeItem(RUNTIME_PATH_STORAGE_KEY);
+  }
+
+  clearNativePaths(): void {
+    this.clearNativeModelMap();
+    this.clearNativeRuntimePath();
   }
 
   getNativeRuntimeUrl(): string | undefined {

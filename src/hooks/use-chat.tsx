@@ -2,8 +2,15 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { getApiUrl } from "@/lib/api-config";
+import { deviceMemoryService } from "@/services/device-memory-service";
 import { webllmService, type WebLLMGenerationConfig } from "@/services/webllm-service";
 import { mentalHealthPromptService, type DASS21Results } from "@/services/mental-health-prompt-service";
+import {
+  buildTrimmedConversationHistory,
+  composeTurnPrompts,
+  getRecommendedContextBudget,
+  type PromptTurnMessage,
+} from "@/services/llm-prompt-service";
 import type { ChatSession, Message, ChatMode, FocusMode } from "@/types/schema";
 import { useToast } from "@/hooks/use-toast";
 import { ttsService } from "@/lib/tts-service";
@@ -309,10 +316,43 @@ export function useChat(sessionId?: string, mentalHealthContext?: MentalHealthCo
 
       // Prepare conversation history for WebLLM
       const currentMessages = queryClient.getQueryData<Message[]>(["/api/chat/sessions", currentSessionId, "messages"]) || [];
-      const conversationHistory = currentMessages.map(msg => ({
+      const conversationHistoryRaw: PromptTurnMessage[] = currentMessages.map((msg): PromptTurnMessage => ({
         role: msg.role === "assistant" ? "assistant" : "user",
-        content: msg.content
+        content: msg.content,
       }));
+
+      const conversationHistory = buildTrimmedConversationHistory(conversationHistoryRaw, {
+        maxTurns: 8,
+        maxCharsPerMessage: 360,
+      });
+
+      const contextBudget = getRecommendedContextBudget(selectedModel, 'webllm-webgpu');
+
+      const ragUserId = mentalHealthContext?.userName?.trim();
+      const retrievedContext = ragUserId
+        ? await deviceMemoryService.buildContextForTurn({
+            userId: ragUserId,
+            query: content,
+            sessionId: currentSessionId || null,
+            recentMessages: currentMessages.map((message) => ({
+              id: message.id,
+              role: message.role,
+              content: message.content,
+              timestamp: (() => {
+                const parsed = message.createdAt ? new Date(message.createdAt) : new Date();
+                return Number.isNaN(parsed.getTime())
+                  ? new Date().toISOString()
+                  : parsed.toISOString();
+              })(),
+            })),
+            limit: 8,
+            modelContextTokens: contextBudget.modelContextTokens,
+            reservedResponseTokens: contextBudget.reservedResponseTokens,
+            charsPerToken: 4,
+            enableSemantic: true,
+            enableReranker: true,
+          })
+        : { prompt: "", items: [] };
 
       // Generate AI response
       const aiMessageId = `ai-${Date.now()}`;
@@ -345,7 +385,9 @@ export function useChat(sessionId?: string, mentalHealthContext?: MentalHealthCo
         modelId: selectedModel,
       });
 
-      const finalSystemPrompt = mentalHealthPromptService.composePrompt({
+      const promptPack = composeTurnPrompts({
+        provider: 'webllm-webgpu',
+        modelId: selectedModel,
         context: {
           userName: mentalHealthContext?.userName,
           dass21Results: mentalHealthContext?.dass21Results,
@@ -353,8 +395,24 @@ export function useChat(sessionId?: string, mentalHealthContext?: MentalHealthCo
           timeOfDay: mentalHealthPromptService.getTimeOfDay(),
         },
         userMessage: content,
+        retrievedMemoryPrompt: retrievedContext.prompt,
         addConversationalContinuity: true,
+        budget: {
+          modelContextTokens: contextBudget.modelContextTokens,
+          reservedResponseTokens: contextBudget.reservedResponseTokens,
+          maxInputTokens: contextBudget.maxInputTokens,
+        },
       });
+      const finalSystemPrompt = promptPack.systemPrompt;
+
+      if (conversationHistory.length > 0 && conversationHistory[conversationHistory.length - 1].role === 'user') {
+        conversationHistory[conversationHistory.length - 1] = {
+          role: 'user',
+          content: promptPack.userPrompt,
+        };
+      } else {
+        conversationHistory.push({ role: 'user', content: promptPack.userPrompt });
+      }
 
       // Stream the response with personalized prompt
       for await (const chunk of webllmService.generateResponse(conversationHistory, optimizedConfig, finalSystemPrompt)) {
@@ -408,7 +466,16 @@ export function useChat(sessionId?: string, mentalHealthContext?: MentalHealthCo
     } finally {
       setIsWebllmGenerating(false);
     }
-  }, [selectedModel, currentSessionId, queryClient, ttsEnabled, toast, scrollToBottom]);
+  }, [
+    selectedModel,
+    currentSessionId,
+    queryClient,
+    ttsEnabled,
+    toast,
+    scrollToBottom,
+    mentalHealthContext?.userName,
+    mentalHealthContext?.dass21Results,
+  ]);
 
   const stopWebLLMGeneration = useCallback(() => {
     webllmService.stopGeneration();

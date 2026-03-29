@@ -101,6 +101,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   useEffect(() => {
     if (!user) return;
 
+    const shouldPreloadVoice =
+      typeof window !== 'undefined' &&
+      window.localStorage.getItem('mindscribe.voice.preload') === 'true';
+
+    if (!shouldPreloadVoice) {
+      return;
+    }
+
     let cancelled = false;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     let idleId: number | null = null;

@@ -32,6 +32,8 @@ import {
 } from "lucide-react";
 import { TTSToggle } from "@/components/TTSToggle";
 import { webllmService, type WebLLMModel } from "@/services/webllm-service";
+import { nativeCpuInferenceService } from "@/services/native-cpu-inference-service";
+import { modelVariantService } from "@/services/model-variant-service";
 import type { ChatMode, FocusMode } from "@/types/schema";
 import type { ChatSession } from "@/services/chat-memory-service";
 
@@ -404,9 +406,11 @@ export function Sidebar({
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => {
+                          onClick={async () => {
                             if (confirm('Clear all downloaded models? This will free up storage space.')) {
-                              webllmService.clearModelCache();
+                              await webllmService.clearModelCache();
+                              modelVariantService.clearNativePaths();
+                              await nativeCpuInferenceService.clearDownloads(true, true);
                               window.location.reload();
                             }
                           }}

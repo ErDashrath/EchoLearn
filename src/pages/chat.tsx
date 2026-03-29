@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { ChatArea } from "@/components/chat/ChatArea";
@@ -30,6 +30,7 @@ export default function ChatPage() {
   const [activeInferenceProvider, setActiveInferenceProvider] = useState<InferenceProviderId | null>(null);
   const [inferenceCapabilities, setInferenceCapabilities] =
     useState<InferenceRuntimeCapabilities | null>(null);
+  const capabilitiesRefreshInFlightRef = useRef(false);
   // System prompt state
   const [customSystemPrompt, setCustomSystemPrompt] = useState("");
   const [isCustomPromptEnabled, setIsCustomPromptEnabled] = useState(false);
@@ -61,6 +62,11 @@ export default function ChatPage() {
     let mounted = true;
 
     const refreshCapabilities = async () => {
+      if (capabilitiesRefreshInFlightRef.current) {
+        return;
+      }
+
+      capabilitiesRefreshInFlightRef.current = true;
       try {
         const capabilities = await inferenceRuntimeService.getCapabilities();
         if (!mounted) {
@@ -74,11 +80,13 @@ export default function ChatPage() {
           setInferenceCapabilities(null);
           setActiveInferenceProvider(null);
         }
+      } finally {
+        capabilitiesRefreshInFlightRef.current = false;
       }
     };
 
     refreshCapabilities();
-    const interval = setInterval(refreshCapabilities, 15000);
+    const interval = setInterval(refreshCapabilities, 60000);
 
     return () => {
       mounted = false;

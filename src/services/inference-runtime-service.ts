@@ -47,12 +47,12 @@ class InferenceRuntimeService {
     if (mode === 'webllm-webgpu') {
       return capabilities.webgpu.available
         ? 'webllm-webgpu'
-        : capabilities.recommendedProvider;
+        : null;
     }
 
     return capabilities.nativeCpu.available
       ? 'native-cpu'
-      : capabilities.recommendedProvider;
+      : null;
   }
 
   getUnavailableReason(

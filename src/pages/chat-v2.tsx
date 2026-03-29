@@ -179,14 +179,14 @@ export default function ChatPage() {
         </div>
 
         <div className="flex items-center space-x-2">
-          <div className="flex items-center rounded-lg border border-[var(--inner)] overflow-hidden">
+          <div className="flex items-center rounded-lg border border-[#c9b9a3] overflow-hidden bg-[#efe3d3]">
             <button
               type="button"
               onClick={() => setInferenceSelectionMode('auto')}
               className={`px-2 py-1 text-xs ${
                 inferenceSelectionMode === 'auto'
-                  ? 'bg-[var(--inner)] text-[var(--text-primary)]'
-                  : 'text-[var(--text-secondary)] hover:bg-[var(--inner)]'
+                  ? 'bg-[#d9c8b2] text-[#1f2a44] font-semibold'
+                  : 'text-[#2f405d] hover:bg-[#e4d5c1]'
               }`}
             >
               Auto
@@ -198,11 +198,11 @@ export default function ChatPage() {
               title={!!inferenceCapabilities && !webgpuAvailable ? webgpuReason : 'Use WebGPU inference'}
               className={`px-2 py-1 text-xs border-l border-[var(--inner)] ${
                 inferenceSelectionMode === 'webllm-webgpu'
-                  ? 'bg-[var(--inner)] text-[var(--text-primary)]'
-                  : 'text-[var(--text-secondary)] hover:bg-[var(--inner)]'
+                  ? 'bg-[#d9c8b2] text-[#1f2a44] font-semibold'
+                  : 'text-[#2f405d] hover:bg-[#e4d5c1]'
               } ${
                 !!inferenceCapabilities && !webgpuAvailable
-                  ? 'opacity-50 cursor-not-allowed hover:bg-transparent'
+                  ? 'text-[#8a7357] bg-[#eadfce] cursor-not-allowed hover:bg-[#eadfce]'
                   : ''
               }`}
             >
@@ -215,11 +215,11 @@ export default function ChatPage() {
               title={!!inferenceCapabilities && !nativeCpuAvailable ? nativeCpuReason : 'Use Native CPU inference'}
               className={`px-2 py-1 text-xs border-l border-[var(--inner)] ${
                 inferenceSelectionMode === 'native-cpu'
-                  ? 'bg-[var(--inner)] text-[var(--text-primary)]'
-                  : 'text-[var(--text-secondary)] hover:bg-[var(--inner)]'
+                  ? 'bg-[#d9c8b2] text-[#1f2a44] font-semibold'
+                  : 'text-[#2f405d] hover:bg-[#e4d5c1]'
               } ${
                 !!inferenceCapabilities && !nativeCpuAvailable
-                  ? 'opacity-50 cursor-not-allowed hover:bg-transparent'
+                  ? 'text-[#8a7357] bg-[#eadfce] cursor-not-allowed hover:bg-[#eadfce]'
                   : ''
               }`}
             >
@@ -229,14 +229,14 @@ export default function ChatPage() {
           <span
             className={`text-xs px-2 py-1 rounded-full border ${
               activeInferenceProvider
-                ? 'border-emerald-500/30 text-emerald-300 bg-emerald-500/10'
-                : 'border-amber-500/30 text-amber-200 bg-amber-500/10'
+                ? 'border-emerald-700/30 text-emerald-900 bg-emerald-100/80 font-medium'
+                : 'border-amber-700/30 text-amber-900 bg-amber-100/80 font-medium'
             }`}
           >
             Inference: {providerLabel} ({inferenceSelectionMode})
           </span>
           {fallbackNotice && (
-            <span className="text-xs px-2 py-1 rounded-full border border-amber-500/30 text-amber-200 bg-amber-500/10">
+            <span className="text-xs px-2 py-1 rounded-full border border-amber-700/30 text-amber-900 bg-amber-100/80 font-medium">
               {fallbackNotice}
             </span>
           )}

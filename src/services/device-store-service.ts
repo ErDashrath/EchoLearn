@@ -6,6 +6,23 @@ export interface DeviceStoreEntry<T = unknown> {
 }
 
 class DeviceStoreService {
+  private async withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    try {
+      return await Promise.race<T>([
+        promise,
+        new Promise<T>((resolve) => {
+          timeoutId = setTimeout(() => resolve(fallback), timeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    }
+  }
+
   isTauriAvailable(): boolean {
     return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
   }
@@ -20,7 +37,7 @@ class DeviceStoreService {
     }
 
     try {
-      return await invoke<T>(command, args);
+      return await this.withTimeout(invoke<T>(command, args), 2000, fallback);
     } catch (error) {
       console.warn(`Device store command failed: ${command}`, error);
       return fallback;

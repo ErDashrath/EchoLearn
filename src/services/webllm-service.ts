@@ -805,12 +805,76 @@ class WebLLMService {
     }
   }
 
-  clearModelCache(): void {
-    localStorage.removeItem('webllm-cached-models');
+  private isLikelyWebLLMStorageName(name: string): boolean {
+    const value = name.toLowerCase();
+    return (
+      value.includes('webllm') ||
+      value.includes('mlc') ||
+      value.includes('tvm') ||
+      value.includes('wasm-cache')
+    );
+  }
+
+  private async deleteIndexedDb(name: string): Promise<void> {
+    await new Promise<void>((resolve) => {
+      const request = indexedDB.deleteDatabase(name);
+      request.onsuccess = () => resolve();
+      request.onerror = () => resolve();
+      request.onblocked = () => resolve();
+    });
+  }
+
+  private async clearIndexedDbCaches(): Promise<void> {
+    if (typeof indexedDB === 'undefined' || typeof indexedDB.databases !== 'function') {
+      return;
+    }
+
+    const databases = await indexedDB.databases();
+    const targets = databases
+      .map((entry) => entry.name)
+      .filter((name): name is string => !!name)
+      .filter((name) => this.isLikelyWebLLMStorageName(name));
+
+    for (const dbName of targets) {
+      await this.deleteIndexedDb(dbName);
+    }
+  }
+
+  private async clearCacheStorage(): Promise<void> {
+    if (typeof window === 'undefined' || !('caches' in window)) {
+      return;
+    }
+
+    try {
+      const keys = await caches.keys();
+      for (const key of keys) {
+        if (this.isLikelyWebLLMStorageName(key)) {
+          await caches.delete(key);
+        }
+      }
+    } catch (error) {
+      console.warn('CacheStorage cleanup failed:', error);
+    }
+  }
+
+  async clearModelCache(): Promise<void> {
+    await this.stopGeneration();
+
     this.currentModel = null;
     this.activeModel = null;
     this.engine = null;
-    console.log('All models cleared from cache');
+    this.isInitializing = false;
+
+    localStorage.setItem('webllm-cached-models', JSON.stringify([]));
+    localStorage.removeItem('webllm-active-model');
+
+    try {
+      await this.clearIndexedDbCaches();
+      await this.clearCacheStorage();
+      console.log('All WebLLM models and caches cleared');
+    } catch (error) {
+      console.warn('Some WebLLM cache entries could not be removed:', error);
+    }
   }
 
   async checkWebGPUSupport(): Promise<boolean> {

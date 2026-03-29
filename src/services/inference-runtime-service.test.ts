@@ -65,7 +65,7 @@ describe('inferenceRuntimeService', () => {
     expect(inferenceRuntimeService.resolveProvider(capabilities, 'auto')).toBe('native-cpu');
   });
 
-  it('falls back to recommended provider when explicit webgpu mode is unavailable', () => {
+  it('returns null when explicit webgpu mode is unavailable', () => {
     const capabilities = buildCapabilities({
       webgpu: {
         provider: 'webllm-webgpu',
@@ -79,10 +79,10 @@ describe('inferenceRuntimeService', () => {
       recommendedProvider: 'native-cpu',
     });
 
-    expect(inferenceRuntimeService.resolveProvider(capabilities, 'webllm-webgpu')).toBe('native-cpu');
+    expect(inferenceRuntimeService.resolveProvider(capabilities, 'webllm-webgpu')).toBeNull();
   });
 
-  it('falls back to recommended provider when explicit native mode is unavailable', () => {
+  it('returns null when explicit native mode is unavailable', () => {
     const capabilities = buildCapabilities({
       webgpu: {
         provider: 'webllm-webgpu',
@@ -96,7 +96,7 @@ describe('inferenceRuntimeService', () => {
       recommendedProvider: 'webllm-webgpu',
     });
 
-    expect(inferenceRuntimeService.resolveProvider(capabilities, 'native-cpu')).toBe('webllm-webgpu');
+    expect(inferenceRuntimeService.resolveProvider(capabilities, 'native-cpu')).toBeNull();
   });
 
   it('returns combined reason text in auto mode', () => {

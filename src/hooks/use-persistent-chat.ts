@@ -31,6 +31,12 @@ import {
   type InferenceSelectionMode,
   type InferenceRuntimeCapabilities,
 } from '@/services/inference-runtime-service';
+import {
+  buildTrimmedConversationHistory,
+  composeTurnPrompts,
+  getRecommendedContextBudget,
+  type PromptTurnMessage,
+} from '@/services/llm-prompt-service';
 import { nativeCpuInferenceService } from '@/services/native-cpu-inference-service';
 import { modelVariantService } from '@/services/model-variant-service';
 import { ttsService } from '@/lib/tts-service';
@@ -94,8 +100,129 @@ const buildRecoveryPrompt = (basePrompt: string): string => `${basePrompt}
 - No stock phrases like "How can I assist you today?" or "Please clarify your query."
 - If the user is casual, a light playful line is okay when respectful.`;
 
-// =============================================================================
-// TYPES
+const stripNativeCliArtifacts = (raw: string, userInput?: string): string => {
+  const ansiStripped = raw
+    .replace(/\x1b\[[0-9;]*m/g, '')
+    .replace(/\r/g, '');
+
+  const filtered = ansiStripped
+    .split('\n')
+    .filter((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        return true;
+      }
+
+      const lowerTrimmed = trimmed.toLowerCase();
+
+      if (lowerTrimmed.startsWith('load_backend:')) return false;
+      if (lowerTrimmed.startsWith('loading model')) return false;
+
+      if (
+        lowerTrimmed.startsWith('build') ||
+        lowerTrimmed.startsWith('model') ||
+        lowerTrimmed.startsWith('modalities')
+      ) return false;
+
+      if (
+        lowerTrimmed.startsWith('available commands:') ||
+        lowerTrimmed.startsWith('/exit') ||
+        lowerTrimmed.startsWith('/regen') ||
+        lowerTrimmed.startsWith('/clear') ||
+        lowerTrimmed.startsWith('/read ') ||
+        lowerTrimmed.startsWith('/glob ')
+      ) return false;
+
+      if (
+        lowerTrimmed.startsWith('----- common params -----') ||
+        lowerTrimmed.startsWith('----- sampling params -----') ||
+        lowerTrimmed.startsWith('----- example-specific params -----')
+      ) return false;
+
+      if (lowerTrimmed.startsWith('[ prompt:')) return false;
+      if (lowerTrimmed.startsWith('system:')) return false;
+      if (lowerTrimmed.startsWith('user:') || lowerTrimmed.startsWith('assistant:')) return false;
+      if (lowerTrimmed.startsWith('"user:') || lowerTrimmed.startsWith("'user:")) return false;
+      if (trimmed === '>' || lowerTrimmed.startsWith('> you are ')) return false;
+      if (/^"?(User|Assistant):\s*$/i.test(trimmed)) return false;
+      if (/^[\u2580\u2584\u2588\s]+$/.test(trimmed)) return false;
+
+      return true;
+    })
+    .map((line) => line.replace(/^\s*"?Assistant:\s*/i, ''))
+    .join('\n')
+    .replace(/^\s*"|"\s*$/g, '')
+    .replace(/\n{3,}/g, '\n\n');
+
+  const normalized = filtered
+    .replace(/^\s*"?user:.*$/gim, '')
+    .replace(/^\s*"?assistant:\s*$/gim, '')
+    .replace(/^\s*'user:.*$/gim, '')
+    .replace(/^\s*'assistant:\s*$/gim, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  const lastAssistantMatch = [...normalized.matchAll(/(?:^|\n)assistant:\s*/gim)].pop();
+  if (lastAssistantMatch && typeof lastAssistantMatch.index === 'number') {
+    const start = lastAssistantMatch.index + lastAssistantMatch[0].length;
+    return normalized.slice(start).trim();
+  }
+
+  if (!userInput?.trim()) {
+    return normalized;
+  }
+
+  const expected = normalizeForCompare(userInput);
+  const remainingLines = normalized.split('\n');
+
+  while (remainingLines.length > 0) {
+    const first = remainingLines[0].trim();
+    if (!first) {
+      remainingLines.shift();
+      continue;
+    }
+
+    const unquoted = first.replace(/^["'`\s]+|["'`\s]+$/g, '');
+    const withoutRole = unquoted.replace(/^user:\s*/i, '');
+
+    if (
+      normalizeForCompare(unquoted) === expected ||
+      normalizeForCompare(withoutRole) === expected
+    ) {
+      remainingLines.shift();
+      continue;
+    }
+
+    break;
+  }
+
+  return remainingLines.join('\n').trim();
+};
+
+const enforceMindScribeIdentity = (raw: string): string => {
+  let text = raw.trim();
+  if (!text) {
+    return text;
+  }
+
+  if (!/(qwen|alibaba cloud|alibaba)/i.test(text)) {
+    return text;
+  }
+
+  text = text.replace(/\b(qwen|alibaba cloud|alibaba)\b/gi, 'MindScribe');
+
+  text = text.replace(
+    /\b(i am|i'm)\s+mindscribe,?\s+a\s+(large\s+language\s+model|language model)[^.]*\./i,
+    'I am MindScribe, your privacy-first mental health companion.',
+  );
+
+  text = text.replace(
+    /\b(i am|i'm)\s+mindscribe,?\s+created by\s+mindscribe[^.]*\./i,
+    'I am MindScribe, your privacy-first mental health companion.',
+  );
+
+  return text.trim();
+};
 // =============================================================================
 
 export interface PersistentChatOptions {
@@ -179,6 +306,7 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const capabilitiesRefreshInFlightRef = useRef(false);
 
   // ===========================================================================
   // AUTO-SELECT MODEL
@@ -212,6 +340,11 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
     let mounted = true;
 
     const refreshCapabilities = async () => {
+      if (capabilitiesRefreshInFlightRef.current) {
+        return;
+      }
+
+      capabilitiesRefreshInFlightRef.current = true;
       try {
         const mappedNativeModelPath = modelVariantService.getNativeModelPath(selectedModel);
         const mappedNativeRuntimePath = modelVariantService.getNativeRuntimePath();
@@ -230,11 +363,13 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
         if (import.meta.env.DEV) {
           console.debug('Failed to refresh inference capabilities', error);
         }
+      } finally {
+        capabilitiesRefreshInFlightRef.current = false;
       }
     };
 
     refreshCapabilities();
-    const interval = setInterval(refreshCapabilities, 15000);
+    const interval = setInterval(refreshCapabilities, 60000);
 
     return () => {
       mounted = false;
@@ -501,15 +636,22 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
     try {
       // Build conversation history
       const memory = chatMemoryService.getMemoryContext(currentSession);
-      const conversationHistory: { role: string; content: string }[] = [];
+      const conversationHistoryRaw: PromptTurnMessage[] = [];
 
       // Add recent messages
       memory.recentMessages.forEach(msg => {
-        conversationHistory.push({
-          role: msg.role,
+        conversationHistoryRaw.push({
+          role: msg.role === 'assistant' ? 'assistant' : 'user',
           content: msg.content,
         });
       });
+
+      const conversationHistory = buildTrimmedConversationHistory(conversationHistoryRaw, {
+        maxTurns: 8,
+        maxCharsPerMessage: 360,
+      });
+
+      const contextBudget = getRecommendedContextBudget(selectedModel, selectedProvider);
 
       const retrievedContext = user?.username
         ? await deviceMemoryService.buildContextForTurn({
@@ -518,8 +660,8 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
             sessionId: currentSession.id,
             recentMessages: memory.recentMessages,
             limit: 10,
-            modelContextTokens: 4096,
-            reservedResponseTokens: 768,
+            modelContextTokens: contextBudget.modelContextTokens,
+            reservedResponseTokens: contextBudget.reservedResponseTokens,
             charsPerToken: 4,
             enableSemantic: true,
             enableReranker: true,
@@ -530,7 +672,10 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
       if (retrievedContext.telemetry && import.meta.env.DEV) {
         console.debug('RAG retrieval telemetry', retrievedContext.telemetry);
       }
-      const finalSystemPrompt = mentalHealthPromptService.composePrompt({
+
+      const promptPack = composeTurnPrompts({
+        provider: selectedProvider,
+        modelId: selectedModel,
         context: {
           userName: resolvedUserName,
           dass21Results,
@@ -541,7 +686,15 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
         retrievedMemoryPrompt: retrievedContext.prompt,
         extraContextSections: memory.contextPrompt ? [memory.contextPrompt] : [],
         addConversationalContinuity: true,
+        recentConversation: conversationHistory,
+        budget: {
+          modelContextTokens: contextBudget.modelContextTokens,
+          reservedResponseTokens: contextBudget.reservedResponseTokens,
+          maxInputTokens: contextBudget.maxInputTokens,
+        },
       });
+      const finalSystemPrompt = promptPack.systemPrompt;
+      const finalUserPrompt = promptPack.userPrompt;
 
       // Config for generation
       const config: WebLLMGenerationConfig = {
@@ -559,11 +712,8 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
         generationConfig: WebLLMGenerationConfig,
       ): AsyncGenerator<string, void, unknown> {
         if (selectedProvider === 'native-cpu') {
-          const transcript = conversationHistory
-            .map((message) => `${message.role === 'assistant' ? 'Assistant' : 'User'}: ${message.content}`)
-            .join('\n');
-
-          const nativePrompt = `${promptOverride}\n\n${transcript}\nAssistant:`;
+          const nativePrompt = finalUserPrompt;
+          const nativeSystemPrompt = promptOverride;
           let emittedAnyChunk = false;
 
           try {
@@ -571,6 +721,7 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
               modelId: selectedModel ?? undefined,
               modelPath: mappedNativeModelPath,
               runtimePath: mappedNativeRuntimePath,
+              systemPrompt: nativeSystemPrompt,
               maxTokens: generationConfig.maxTokens,
               temperature: generationConfig.temperature,
             })) {
@@ -578,15 +729,13 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
               yield chunk;
             }
           } catch (error) {
-            const recoveryMessage = emittedAnyChunk
-              ? '\n\n[Native CPU stream interrupted. Please retry this message.]'
-              : 'Native CPU generation failed before response started. Please retry after checking runtime/model integrity settings.';
-
             if (import.meta.env.DEV) {
               console.debug('Native CPU generation stream failed', error);
             }
 
-            yield recoveryMessage;
+            if (!emittedAnyChunk) {
+              throw new Error('Native CPU generation failed before response started. Please retry.');
+            }
           }
 
           return;
@@ -617,14 +766,23 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
       let responseContent = '';
       for await (const chunk of generateFromActiveProvider(finalSystemPrompt, optimizedConfig)) {
         responseContent += chunk;
+        const visibleResponse = selectedProvider === 'native-cpu'
+          ? enforceMindScribeIdentity(stripNativeCliArtifacts(responseContent, content))
+          : responseContent;
         
         // Update UI with streaming content
         const updatedMessages = [...currentSession.messages, {
           ...aiMessagePlaceholder,
-          content: responseContent,
+          content: visibleResponse,
         }];
         setSession(prev => prev ? { ...prev, messages: updatedMessages } : null);
         scrollToBottom();
+      }
+
+      if (selectedProvider === 'native-cpu') {
+        responseContent = enforceMindScribeIdentity(
+          stripNativeCliArtifacts(responseContent, content),
+        );
       }
 
       const shouldRetryForQuality = isLowQualityReply(
@@ -648,14 +806,23 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
 
         for await (const chunk of generateFromActiveProvider(retryPrompt, retryConfig)) {
           responseContent += chunk;
+          const visibleResponse = selectedProvider === 'native-cpu'
+            ? enforceMindScribeIdentity(stripNativeCliArtifacts(responseContent, content))
+            : responseContent;
 
           const updatedMessages = [...currentSession.messages, {
             ...aiMessagePlaceholder,
-            content: responseContent,
+            content: visibleResponse,
           }];
           setSession(prev => prev ? { ...prev, messages: updatedMessages } : null);
           scrollToBottom();
         }
+      }
+
+      if (selectedProvider === 'native-cpu') {
+        responseContent = enforceMindScribeIdentity(
+          stripNativeCliArtifacts(responseContent, content),
+        );
       }
 
       responseContent = responseContent.trim();

@@ -118,12 +118,14 @@ async function main() {
 
     try {
       if (dryRun) {
-        console.log(`[native-gguf][dry-run] ${model.id} -> ${url} -> ${targetPath}`);
+        console.log(`[native-gguf][dry-run] MLC id '${model.id}' -> GGUF '${url}' -> '${targetPath}'`);
       } else if (!fs.existsSync(targetPath)) {
-        console.log(`[native-gguf] Downloading ${model.id}`);
+        console.log(`[native-gguf] Downloading GGUF for MLC id '${model.id}'`);
+        console.log(`[native-gguf] Source: ${url}`);
+        console.log(`[native-gguf] Target: ${targetPath}`);
         await downloadFile(url, targetPath);
       } else {
-        console.log(`[native-gguf] Exists, skipping ${model.id}`);
+        console.log(`[native-gguf] GGUF already exists for MLC id '${model.id}', skipping`);
       }
 
       map[model.id] = targetPath.replace(/\\/g, '/');

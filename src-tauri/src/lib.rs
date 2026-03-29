@@ -3,18 +3,26 @@ mod memory_store;
 mod native_inference;
 mod voice_native;
 
+#[cfg(not(debug_assertions))]
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-  tauri::Builder::default()
-    .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+  #[allow(unused_mut)]
+  let mut builder = tauri::Builder::default();
+
+  #[cfg(not(debug_assertions))]
+  {
+    builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
       if let Some(window) = app.get_webview_window("main") {
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
       }
-    }))
+    }));
+  }
+
+  builder
     .manage(device_store::DeviceStoreState::default())
     .manage(memory_store::MemoryStoreState::default())
     .invoke_handler(tauri::generate_handler![
@@ -31,6 +39,7 @@ pub fn run() {
       native_inference::native_inference_has_nvidia_gpu,
       native_inference::native_inference_download_model,
       native_inference::native_inference_download_runtime,
+      native_inference::native_inference_clear_downloads,
       native_inference::native_inference_generate,
       native_inference::native_inference_generate_stream,
       native_inference::native_inference_stop,
