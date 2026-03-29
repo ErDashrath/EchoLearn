@@ -318,6 +318,32 @@ select:focus-visible {
   box-shadow: 0 0 0 2px var(--ring), 0 0 0 2px var(--background);
 }
 
+/* Text selection highlighting for chat messages */
+::selection {
+  background-color: rgba(216, 122, 67, 0.5);
+  color: inherit;
+}
+
+::-moz-selection {
+  background-color: rgba(216, 122, 67, 0.5);
+  color: inherit;
+}
+
+/* Specific selection highlighting for message bubbles */
+.chat-message {
+  position: relative;
+}
+
+.chat-message ::selection {
+  background-color: #D87A43;
+  color: white;
+}
+
+.chat-message::-moz-selection {
+  background-color: #D87A43;
+  color: white;
+}
+
 /* Animation utilities */
 .animate-fade-in {
   animation: fadeIn 0.3s ease-in-out;

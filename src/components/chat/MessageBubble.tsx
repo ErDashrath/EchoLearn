@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
-import { Lightbulb, CheckCircle } from "lucide-react";
+import { Lightbulb, CheckCircle, Copy, Check } from "lucide-react";
 import type { Message, GrammarSuggestion, MessageFeedback } from "@/types/schema";
 
 interface MessageBubbleProps {
@@ -13,8 +13,25 @@ interface MessageBubbleProps {
 export function MessageBubble({ message, onRegenerate, isRegenerating }: MessageBubbleProps) {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
+  const [copied, setCopied] = useState(false);
   const isUser = message.role === "user";
   const isAI = message.role === "assistant";
+
+  const handleCopyMessage = async () => {
+    try {
+      await navigator.clipboard.writeText(message.content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
+  const formatTime = (date: Date | undefined) => {
+    if (!date) return '';
+    const d = new Date(date);
+    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+  };
 
   const renderMessageWithSuggestions = (content: string, suggestions: GrammarSuggestion[]) => {
     if (!suggestions || suggestions.length === 0) {
@@ -129,34 +146,57 @@ export function MessageBubble({ message, onRegenerate, isRegenerating }: Message
       className={`flex items-start ${isUser ? "justify-end" : ""}`}
     >
       <div className={`w-full ${isUser ? "flex justify-end" : ""}`}>
-        <div 
-          className={`${
-            isUser 
-              ? "bg-[#D87A43] rounded-[18px] px-4 py-3 max-w-[70%] text-white"
-              : "bg-transparent px-0 py-2 max-w-[75%]"
-          }`}
-        >
-          {isAI ? (
-            <MarkdownRenderer 
-              content={message.content} 
-              className="text-[#2E3A4F] text-[1.03rem] leading-[1.7]"
-            />
-          ) : (
-            <p className="leading-relaxed text-white">
-              {renderMessageWithSuggestions(message.content, message.grammarSuggestions || [])}
-            </p>
+        <div className={`${isUser ? "max-w-[70%]" : "w-full max-w-[75%]"}`}>
+          <div 
+            className={`chat-message ${
+              isUser 
+                ? "bg-[#D87A43] rounded-[18px] px-4 py-2 text-white"
+                : "bg-transparent px-0 py-0"
+            }`}
+            style={{
+              userSelect: 'text',
+            }}
+          >
+            {isAI ? (
+              <MarkdownRenderer 
+                content={message.content} 
+                className="text-[#2E3A4F] text-[1.03rem] leading-[1.7]"
+              />
+            ) : (
+              <p className="leading-relaxed text-white">
+                {renderMessageWithSuggestions(message.content, message.grammarSuggestions || [])}
+              </p>
+            )}
+          </div>
+
+          {/* Timestamp and Copy Button */}
+          <div className={`flex items-center gap-2 ${isUser ? "justify-end" : "justify-start"} text-xs`}>
+            <span className="text-[var(--text-secondary)]">
+              {formatTime(message.createdAt)}
+            </span>
+            <button
+              onClick={handleCopyMessage}
+              className="inline-flex items-center justify-center p-1.5 rounded-md text-[var(--text-secondary)] hover:bg-[var(--inner)] hover:text-[var(--text-primary)] transition-colors duration-150"
+              title="Copy message"
+            >
+              {copied ? (
+                <Check className="h-3.5 w-3.5" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" />
+              )}
+            </button>
+          </div>
+
+          {/* Grammar suggestions for user messages */}
+          {isUser && message.grammarSuggestions && message.grammarSuggestions.length > 0 && showSuggestions && (
+            <GrammarSuggestionsCard suggestions={message.grammarSuggestions} />
+          )}
+
+          {/* Feedback for AI messages */}
+          {isAI && message.feedback && showFeedback && (
+            <FeedbackCard feedback={message.feedback} />
           )}
         </div>
-
-        {/* Grammar suggestions for user messages */}
-        {isUser && message.grammarSuggestions && message.grammarSuggestions.length > 0 && showSuggestions && (
-          <GrammarSuggestionsCard suggestions={message.grammarSuggestions} />
-        )}
-
-        {/* Feedback for AI messages */}
-        {isAI && message.feedback && showFeedback && (
-          <FeedbackCard feedback={message.feedback} />
-        )}
       </div>
     </motion.div>
   );
