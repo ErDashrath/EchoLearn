@@ -2,6 +2,7 @@ declare global {
   interface Window {
     __MINDSCRIBE_NATIVE_CPU_MODEL_MAP__?: unknown;
     __MINDSCRIBE_NATIVE_CPU_RUNTIME_URL__?: string;
+    __MINDSCRIBE_NATIVE_CUDA_RUNTIME_URL__?: string;
   }
 }
 
@@ -103,6 +104,24 @@ class ModelVariantService {
 
     const trimmed = runtimeUrl.trim();
     return trimmed || undefined;
+  }
+
+  getNativeCudaRuntimeUrl(): string | undefined {
+    const runtimeUrl = window.__MINDSCRIBE_NATIVE_CUDA_RUNTIME_URL__;
+    if (typeof runtimeUrl !== 'string') {
+      return undefined;
+    }
+
+    const trimmed = runtimeUrl.trim();
+    return trimmed || undefined;
+  }
+
+  getPreferredNativeRuntimeUrl(hasNvidiaGpu: boolean): string | undefined {
+    if (hasNvidiaGpu) {
+      return this.getNativeCudaRuntimeUrl() ?? this.getNativeRuntimeUrl();
+    }
+
+    return this.getNativeRuntimeUrl();
   }
 }
 

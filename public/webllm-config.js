@@ -68,7 +68,11 @@ window.__MINDSCRIBE_WEBLLM_MODELS__ = [
 ];
 
 window.__MINDSCRIBE_NATIVE_CPU_RUNTIME_URL__ =
-  'https://huggingface.co/mindscribe/native-runtime/resolve/main/llama-cli.exe?download=true';
+  'https://github.com/ggml-org/llama.cpp/releases/download/b8575/llama-b8575-bin-win-cpu-x64.zip';
+
+// Optional CUDA runtime bundle URL. Downloaded only when an NVIDIA GPU is detected.
+window.__MINDSCRIBE_NATIVE_CUDA_RUNTIME_URL__ =
+  'https://github.com/ggml-org/llama.cpp/releases/download/b8575/llama-b8575-bin-win-cuda-12.4-x64.zip';
 
 // Optional: set this at runtime if you want exact MLC -> GGUF path mapping from frontend.
 // Example structure:

@@ -730,6 +730,184 @@ fn sanitize_filename(value: &str) -> String {
   }
 }
 
+fn should_treat_runtime_download_as_zip(
+  runtime_url: &str,
+  content_type: Option<&str>,
+  content_disposition: Option<&str>,
+) -> bool {
+  let lower_url = runtime_url.to_ascii_lowercase();
+  if lower_url.ends_with(".zip") {
+    return true;
+  }
+
+  if let Some(content_type) = content_type {
+    let lower = content_type.to_ascii_lowercase();
+    if lower.contains("zip") {
+      return true;
+    }
+  }
+
+  if let Some(content_disposition) = content_disposition {
+    let lower = content_disposition.to_ascii_lowercase();
+    if lower.contains(".zip") {
+      return true;
+    }
+  }
+
+  false
+}
+
+fn clear_directory_contents(target_dir: &Path) -> Result<(), String> {
+  if !target_dir.exists() {
+    return Ok(());
+  }
+
+  for entry in fs::read_dir(target_dir)
+    .map_err(|error| format!("failed to read {}: {error}", target_dir.display()))?
+  {
+    let entry = entry.map_err(|error| format!("failed to access dir entry: {error}"))?;
+    let path = entry.path();
+    if path.is_dir() {
+      fs::remove_dir_all(&path)
+        .map_err(|error| format!("failed to remove directory {}: {error}", path.display()))?;
+    } else {
+      fs::remove_file(&path)
+        .map_err(|error| format!("failed to remove file {}: {error}", path.display()))?;
+    }
+  }
+
+  Ok(())
+}
+
+fn extract_runtime_zip(archive_path: &Path, runtime_dir: &Path) -> Result<(), String> {
+  let file = File::open(archive_path)
+    .map_err(|error| format!("failed to open runtime archive {}: {error}", archive_path.display()))?;
+  let mut archive = zip::ZipArchive::new(file)
+    .map_err(|error| format!("failed to read runtime archive {}: {error}", archive_path.display()))?;
+
+  for index in 0..archive.len() {
+    let mut entry = archive
+      .by_index(index)
+      .map_err(|error| format!("failed to read zip entry #{index}: {error}"))?;
+
+    let Some(safe_name) = entry.enclosed_name().map(PathBuf::from) else {
+      continue;
+    };
+
+    let out_path = runtime_dir.join(safe_name);
+
+    if entry.is_dir() {
+      fs::create_dir_all(&out_path)
+        .map_err(|error| format!("failed to create directory {}: {error}", out_path.display()))?;
+      continue;
+    }
+
+    if let Some(parent) = out_path.parent() {
+      fs::create_dir_all(parent)
+        .map_err(|error| format!("failed to create directory {}: {error}", parent.display()))?;
+    }
+
+    let mut output = File::create(&out_path)
+      .map_err(|error| format!("failed to create {}: {error}", out_path.display()))?;
+    copy(&mut entry, &mut output)
+      .map_err(|error| format!("failed to extract {}: {error}", out_path.display()))?;
+  }
+
+  Ok(())
+}
+
+fn find_runtime_executable_in_dir(runtime_dir: &Path) -> Option<PathBuf> {
+  let direct = runtime_dir.join("llama-cli.exe");
+  if direct.exists() && direct.is_file() {
+    return Some(direct);
+  }
+
+  let mut candidates = Vec::new();
+  collect_executables(runtime_dir, 6, &mut candidates);
+  let candidates = dedupe_paths(candidates);
+
+  let mut best: Option<(i32, PathBuf)> = None;
+  for candidate in candidates {
+    if !candidate.exists() || !candidate.is_file() {
+      continue;
+    }
+
+    let file_name = candidate
+      .file_name()
+      .map(|value| value.to_string_lossy().to_ascii_lowercase())
+      .unwrap_or_default();
+
+    let mut score = runtime_probe_score(&candidate);
+    if file_name.contains("llama") {
+      score += 4;
+    }
+    if file_name.contains("cli") {
+      score += 2;
+    }
+
+    match &best {
+      Some((best_score, _)) if *best_score >= score => {}
+      _ => best = Some((score, candidate)),
+    }
+  }
+
+  best.map(|(_, path)| path)
+}
+
+fn output_has_nvidia_gpu(output: &str) -> bool {
+  output
+    .to_ascii_lowercase()
+    .contains("nvidia")
+}
+
+fn command_output_contains_nvidia(program: &str, args: &[&str]) -> bool {
+  let output = Command::new(program)
+    .args(args)
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped())
+    .output();
+
+  let Ok(output) = output else {
+    return false;
+  };
+
+  if !output.status.success() {
+    return false;
+  }
+
+  let stdout = String::from_utf8_lossy(&output.stdout);
+  let stderr = String::from_utf8_lossy(&output.stderr);
+  output_has_nvidia_gpu(&format!("{}\n{}", stdout, stderr))
+}
+
+fn has_nvidia_gpu() -> bool {
+  if !cfg!(target_os = "windows") {
+    return false;
+  }
+
+  command_output_contains_nvidia(
+    "powershell",
+    &[
+      "-NoProfile",
+      "-Command",
+      "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name",
+    ],
+  )
+    || command_output_contains_nvidia(
+      "cmd",
+      &["/C", "wmic path win32_VideoController get name"],
+    )
+    || command_output_contains_nvidia(
+      "nvidia-smi",
+      &["--query-gpu=name", "--format=csv,noheader"],
+    )
+}
+
+#[tauri::command]
+pub fn native_inference_has_nvidia_gpu() -> bool {
+  has_nvidia_gpu()
+}
+
 #[tauri::command]
 pub fn native_inference_download_model(
   app: tauri::AppHandle,
@@ -825,33 +1003,71 @@ pub fn native_inference_download_runtime(
   fs::create_dir_all(&runtime_dir)
     .map_err(|error| format!("failed to create runtime directory {}: {error}", runtime_dir.display()))?;
 
-  let runtime_path = runtime_dir.join("native-runtime.exe");
+  if let Some(existing_runtime) = find_runtime_executable_in_dir(&runtime_dir) {
+    let digest = compute_sha256(&existing_runtime)?;
+    let size_bytes = fs::metadata(&existing_runtime)
+      .map(|metadata| metadata.len())
+      .map_err(|error| format!("failed to stat {}: {error}", existing_runtime.display()))?;
 
-  if !runtime_path.exists() {
-    let client = reqwest::blocking::Client::builder()
-      .user_agent("MindScribe-Native-Runtime-Downloader/1.0")
-      .build()
-      .map_err(|error| format!("failed to initialize HTTP client: {error}"))?;
+    return Ok(NativeRuntimeDownloadResult {
+      runtime_path: existing_runtime.to_string_lossy().to_string(),
+      sha256: digest,
+      size_bytes,
+    });
+  }
 
-    let mut response = client
-      .get(&runtime_url)
-      .send()
-      .map_err(|error| format!("failed to download runtime from URL: {error}"))?;
+  let client = reqwest::blocking::Client::builder()
+    .user_agent("MindScribe-Native-Runtime-Downloader/1.0")
+    .build()
+    .map_err(|error| format!("failed to initialize HTTP client: {error}"))?;
 
-    if !response.status().is_success() {
-      return Err(format!(
-        "runtime download failed with status {} from {}",
-        response.status(),
-        runtime_url
-      ));
-    }
+  let mut response = client
+    .get(&runtime_url)
+    .send()
+    .map_err(|error| format!("failed to download runtime from URL: {error}"))?;
 
+  if !response.status().is_success() {
+    return Err(format!(
+      "runtime download failed with status {} from {}",
+      response.status(),
+      runtime_url
+    ));
+  }
+
+  let content_type = response
+    .headers()
+    .get(reqwest::header::CONTENT_TYPE)
+    .and_then(|value| value.to_str().ok());
+  let content_disposition = response
+    .headers()
+    .get(reqwest::header::CONTENT_DISPOSITION)
+    .and_then(|value| value.to_str().ok());
+
+  let runtime_path = if should_treat_runtime_download_as_zip(&runtime_url, content_type, content_disposition) {
+    clear_directory_contents(&runtime_dir)?;
+
+    let archive_path = runtime_dir.join("runtime-download.zip");
+    let mut archive_file = File::create(&archive_path)
+      .map_err(|error| format!("failed to create {}: {error}", archive_path.display()))?;
+
+    copy(&mut response, &mut archive_file)
+      .map_err(|error| format!("failed to write {}: {error}", archive_path.display()))?;
+
+    extract_runtime_zip(&archive_path, &runtime_dir)?;
+    let _ = fs::remove_file(&archive_path);
+
+    find_runtime_executable_in_dir(&runtime_dir)
+      .ok_or_else(|| String::from("runtime archive extracted but llama-cli.exe was not found."))?
+  } else {
+    let runtime_path = runtime_dir.join("native-runtime.exe");
     let mut file = File::create(&runtime_path)
       .map_err(|error| format!("failed to create {}: {error}", runtime_path.display()))?;
 
     copy(&mut response, &mut file)
       .map_err(|error| format!("failed to write {}: {error}", runtime_path.display()))?;
-  }
+
+    runtime_path
+  };
 
   let digest = compute_sha256(&runtime_path)?;
   let size_bytes = fs::metadata(&runtime_path)
@@ -1310,5 +1526,39 @@ mod tests {
   fn validated_download_url_rejects_unknown_hosts() {
     let result = validated_download_url("https://example.com/file.gguf", "Model");
     assert!(result.is_err());
+  }
+
+  #[test]
+  fn runtime_download_zip_detection_by_url() {
+    assert!(should_treat_runtime_download_as_zip(
+      "https://github.com/ggml-org/llama.cpp/releases/download/b123/llama-bin-win-cpu-x64.zip",
+      None,
+      None,
+    ));
+  }
+
+  #[test]
+  fn runtime_download_zip_detection_by_content_type() {
+    assert!(should_treat_runtime_download_as_zip(
+      "https://example.com/runtime",
+      Some("application/zip"),
+      None,
+    ));
+  }
+
+  #[test]
+  fn runtime_download_zip_detection_rejects_plain_exe() {
+    assert!(!should_treat_runtime_download_as_zip(
+      "https://example.com/native-runtime.exe",
+      Some("application/octet-stream"),
+      None,
+    ));
+  }
+
+  #[test]
+  fn output_has_nvidia_gpu_detects_vendor_name() {
+    assert!(output_has_nvidia_gpu("NVIDIA GeForce RTX 3060"));
+    assert!(output_has_nvidia_gpu("name\r\nNVIDIA RTX A4000"));
+    assert!(!output_has_nvidia_gpu("Intel(R) UHD Graphics"));
   }
 }

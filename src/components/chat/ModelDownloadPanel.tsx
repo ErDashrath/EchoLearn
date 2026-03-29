@@ -76,11 +76,14 @@ export function ModelDownloadPanel({
       if (success) {
         webllmService.clearProgressCallback();
 
-        const runtimeUrl = modelVariantService.getNativeRuntimeUrl();
+        const hasNvidiaGpu = await nativeCpuInferenceService.hasNvidiaGpu();
+        const runtimeUrl = modelVariantService.getPreferredNativeRuntimeUrl(hasNvidiaGpu);
         if (runtimeUrl) {
           setDownloadProgress({
             progress: 0.92,
-            text: 'Preparing native CPU runtime...',
+            text: hasNvidiaGpu
+              ? 'Preparing native CUDA runtime...'
+              : 'Preparing native CPU runtime...',
           });
 
           try {

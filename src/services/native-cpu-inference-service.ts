@@ -177,6 +177,18 @@ class NativeCpuInferenceService {
     }
   }
 
+  async hasNvidiaGpu(): Promise<boolean> {
+    if (!this.isTauriRuntime()) {
+      return false;
+    }
+
+    try {
+      return await invoke<boolean>('native_inference_has_nvidia_gpu');
+    } catch {
+      return false;
+    }
+  }
+
   async downloadModelFromUrl(modelId: string, hfUrl: string): Promise<NativeCpuModelDownloadResult | null> {
     if (!this.isTauriRuntime()) {
       return null;
