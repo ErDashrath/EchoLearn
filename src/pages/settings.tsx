@@ -8,6 +8,7 @@ import { webllmService } from '@/services/webllm-service';
 import { chatMemoryService } from '@/services/chat-memory-service';
 import { deviceMemoryService } from '@/services/device-memory-service';
 import { useToast } from '@/hooks/use-toast';
+import { useTour } from '@/contexts/TourContext';
 
 type RagTelemetrySnapshot = {
   timestamp?: string;
@@ -73,6 +74,7 @@ const formatSnapshotTime = (value?: string): string => {
 
 export default function SettingsPage() {
   const { user } = useAuth();
+  const { startTour } = useTour();
   const { toast } = useToast();
   const [isModelPanelOpen, setIsModelPanelOpen] = useState(false);
   const [activeModel, setActiveModel] = useState<string | null>(null);
@@ -366,6 +368,16 @@ export default function SettingsPage() {
           <p className="text-[var(--text-secondary)]">
             Manage your account and app preferences.
           </p>
+          <div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => startTour(true)}
+              className="border-[rgba(58,74,99,0.16)] text-[var(--text-primary)] hover:bg-[var(--inner)]"
+            >
+              Restart First-Time Tour
+            </Button>
+          </div>
         </header>
 
         <section className="dashboard-card-primary rounded-2xl p-5">
@@ -399,14 +411,14 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        <section className="dashboard-card-primary rounded-2xl p-5">
+        <section className="dashboard-card-primary rounded-2xl p-5" data-tour-id="settings-local-model">
           <div className="flex items-start gap-3">
             <div className="p-2 rounded-lg bg-[var(--inner)]">
               <Brain className="w-4 h-4 text-[var(--text-secondary)]" />
             </div>
             <div className="flex-1">
               <h2 className="text-lg font-semibold">Local AI Model</h2>
-              <p className="text-sm text-[var(--text-secondary)] mt-1">
+              <p className="text-sm text-[var(--text-secondary)] mt-1" data-tour-id="settings-model-status">
                 Current model: {activeModel || 'No model selected'}
               </p>
               <p className="text-sm text-[var(--text-secondary)] mt-1">
@@ -416,6 +428,7 @@ export default function SettingsPage() {
               <div className="flex flex-wrap gap-3 mt-4">
                 <Button
                   type="button"
+                  data-tour-id="settings-download-model"
                   onClick={() => setIsModelPanelOpen(true)}
                   className="bg-[var(--accent)] text-white hover:bg-[var(--accent-dark)]"
                 >

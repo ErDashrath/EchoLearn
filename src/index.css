@@ -318,6 +318,14 @@ select:focus-visible {
   box-shadow: 0 0 0 2px var(--ring), 0 0 0 2px var(--background);
 }
 
+.tour-highlight-target {
+  position: relative;
+  z-index: 132;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.97), 0 0 0 6px rgba(251, 191, 36, 0.99), 0 0 0 9999px rgba(2, 6, 23, 0.28), 0 0 28px rgba(251, 191, 36, 0.72), inset 0 0 0 9999px rgba(255, 255, 255, 0.08), inset 0 0 22px rgba(255, 255, 255, 0.35);
+  border-radius: 12px;
+  filter: brightness(1.22) saturate(1.2) contrast(1.42);
+}
+
 /* Text selection highlighting for chat messages */
 ::selection {
   background-color: rgba(216, 122, 67, 0.5);
