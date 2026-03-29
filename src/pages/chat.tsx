@@ -17,6 +17,7 @@ import {
   type InferenceSelectionMode,
   type InferenceRuntimeCapabilities,
 } from "@/services/inference-runtime-service";
+import { webllmService } from "@/services/webllm-service";
 import type { ChatMode, FocusMode } from "@/types/schema";
 import type { DASS21Results } from "@/services/mental-health-prompt-service";
 
@@ -107,6 +108,7 @@ export default function ChatPage() {
     userName: user?.username || user?.name,
     dass21Results
   });
+  const fallbackModelId = webllmService.getAvailableModels()[0]?.id;
 
   const handleModeChange = (newMode: ChatMode) => {
     updateMode(newMode);
@@ -205,6 +207,17 @@ export default function ChatPage() {
     : '';
 
   const nativeStatus = inferenceCapabilities?.nativeCpuStatus;
+  const webgpuAvailable = inferenceCapabilities?.webgpu.available ?? false;
+  const nativeCpuAvailable = inferenceCapabilities?.nativeCpu.available ?? false;
+  const webgpuReason = inferenceCapabilities?.webgpu.reason || 'WebGPU provider is unavailable.';
+  const nativeCpuReason = inferenceCapabilities?.nativeCpu.reason || 'Native CPU provider is unavailable.';
+  const fallbackNotice = inferenceSelectionMode !== 'auto' && activeInferenceProvider
+    ? inferenceSelectionMode === 'webllm-webgpu' && activeInferenceProvider === 'native-cpu'
+      ? 'WebGPU is unavailable. Using Native CPU fallback.'
+      : inferenceSelectionMode === 'native-cpu' && activeInferenceProvider === 'webllm-webgpu'
+        ? 'Native CPU is unavailable. Using WebGPU fallback.'
+        : ''
+    : '';
 
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col">
@@ -245,10 +258,16 @@ export default function ChatPage() {
             <button
               type="button"
               onClick={() => handleInferenceModeChange('webllm-webgpu')}
+              disabled={!!inferenceCapabilities && !webgpuAvailable}
+              title={!!inferenceCapabilities && !webgpuAvailable ? webgpuReason : 'Use WebGPU inference'}
               className={`px-2 py-1 text-xs border-l border-gray-700 ${
                 inferenceSelectionMode === 'webllm-webgpu'
                   ? 'bg-gray-700 text-white'
                   : 'text-gray-300 hover:bg-gray-800'
+              } ${
+                !!inferenceCapabilities && !webgpuAvailable
+                  ? 'opacity-50 cursor-not-allowed hover:bg-transparent'
+                  : ''
               }`}
             >
               WebGPU
@@ -256,10 +275,16 @@ export default function ChatPage() {
             <button
               type="button"
               onClick={() => handleInferenceModeChange('native-cpu')}
+              disabled={!!inferenceCapabilities && !nativeCpuAvailable}
+              title={!!inferenceCapabilities && !nativeCpuAvailable ? nativeCpuReason : 'Use Native CPU inference'}
               className={`px-2 py-1 text-xs border-l border-gray-700 ${
                 inferenceSelectionMode === 'native-cpu'
                   ? 'bg-gray-700 text-white'
                   : 'text-gray-300 hover:bg-gray-800'
+              } ${
+                !!inferenceCapabilities && !nativeCpuAvailable
+                  ? 'opacity-50 cursor-not-allowed hover:bg-transparent'
+                  : ''
               }`}
             >
               Native CPU
@@ -274,6 +299,11 @@ export default function ChatPage() {
           >
             Inference: {providerLabel} ({inferenceSelectionMode})
           </span>
+          {fallbackNotice && (
+            <span className="text-xs px-2 py-1 rounded-full border border-amber-500/30 text-amber-200 bg-amber-500/10">
+              {fallbackNotice}
+            </span>
+          )}
           {/* Model Download Button - Opens Right Panel */}
           <Button
             variant="ghost"
@@ -287,7 +317,7 @@ export default function ChatPage() {
           
           {/* Model Selector - Shows current model */}
           <ModelSelector
-            selectedModel={selectedModel || "llama-3.2-3b"}
+            selectedModel={selectedModel || fallbackModelId}
             onModelSelect={selectWebLLMModel}
             isLoading={isWebllmGenerating}
             onOpenSidebar={toggleModelPanel}

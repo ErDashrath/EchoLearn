@@ -32,6 +32,7 @@ import {
   type InferenceRuntimeCapabilities,
 } from '@/services/inference-runtime-service';
 import { nativeCpuInferenceService } from '@/services/native-cpu-inference-service';
+import { modelVariantService } from '@/services/model-variant-service';
 import { ttsService } from '@/lib/tts-service';
 
 const GENERIC_REPLY_PATTERNS: RegExp[] = [
@@ -212,7 +213,13 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
 
     const refreshCapabilities = async () => {
       try {
-        const capabilities = await inferenceRuntimeService.getCapabilities();
+        const mappedNativeModelPath = modelVariantService.getNativeModelPath(selectedModel);
+        const mappedNativeRuntimePath = modelVariantService.getNativeRuntimePath();
+        const capabilities = await inferenceRuntimeService.getCapabilities(
+          selectedModel ?? undefined,
+          mappedNativeModelPath,
+          mappedNativeRuntimePath,
+        );
         if (!mounted) {
           return;
         }
@@ -233,7 +240,7 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
       mounted = false;
       clearInterval(interval);
     };
-  }, [inferenceSelectionMode]);
+  }, [inferenceSelectionMode, selectedModel]);
 
   const setInferenceSelectionMode = useCallback((mode: InferenceSelectionMode) => {
     inferenceRuntimeService.setSelectionMode(mode);
@@ -444,7 +451,13 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
       return;
     }
 
-    const capabilities = await inferenceRuntimeService.getCapabilities();
+    const mappedNativeModelPath = modelVariantService.getNativeModelPath(selectedModel);
+    const mappedNativeRuntimePath = modelVariantService.getNativeRuntimePath();
+    const capabilities = await inferenceRuntimeService.getCapabilities(
+      selectedModel ?? undefined,
+      mappedNativeModelPath,
+      mappedNativeRuntimePath,
+    );
     const selectedProvider = inferenceRuntimeService.resolveProvider(
       capabilities,
       inferenceSelectionMode,
@@ -555,6 +568,9 @@ export function usePersistentChat(options: PersistentChatOptions = {}): Persiste
 
           try {
             for await (const chunk of nativeCpuInferenceService.generateStream(nativePrompt, {
+              modelId: selectedModel ?? undefined,
+              modelPath: mappedNativeModelPath,
+              runtimePath: mappedNativeRuntimePath,
               maxTokens: generationConfig.maxTokens,
               temperature: generationConfig.temperature,
             })) {

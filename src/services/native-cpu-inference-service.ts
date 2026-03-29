@@ -5,6 +5,7 @@ export interface NativeCpuInferenceStatus {
   available: boolean;
   runtime: string;
   model?: string;
+  selectedModelId?: string;
   runtimeSha256?: string;
   modelSha256?: string;
   profile?: string;
@@ -14,6 +15,9 @@ export interface NativeCpuInferenceStatus {
 }
 
 export interface NativeCpuInferenceOptions {
+  modelId?: string;
+  modelPath?: string;
+  runtimePath?: string;
   maxTokens?: number;
   temperature?: number;
 }
@@ -25,12 +29,25 @@ interface NativeCpuStreamEventPayload {
   error?: string;
 }
 
+export interface NativeCpuModelDownloadResult {
+  modelId: string;
+  modelPath: string;
+  sha256: string;
+  sizeBytes: number;
+}
+
+export interface NativeCpuRuntimeDownloadResult {
+  runtimePath: string;
+  sha256: string;
+  sizeBytes: number;
+}
+
 class NativeCpuInferenceService {
   private isTauriRuntime(): boolean {
     return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
   }
 
-  async getStatus(): Promise<NativeCpuInferenceStatus> {
+  async getStatus(modelId?: string, modelPath?: string, runtimePath?: string): Promise<NativeCpuInferenceStatus> {
     if (!this.isTauriRuntime()) {
       return {
         available: false,
@@ -40,7 +57,11 @@ class NativeCpuInferenceService {
     }
 
     try {
-      return await invoke<NativeCpuInferenceStatus>('native_inference_status');
+      return await invoke<NativeCpuInferenceStatus>('native_inference_status', {
+        modelId,
+        modelPath,
+        runtimePath,
+      });
     } catch (error) {
       return {
         available: false,
@@ -57,6 +78,9 @@ class NativeCpuInferenceService {
 
     return invoke<string>('native_inference_generate', {
       prompt,
+      modelId: options.modelId,
+      modelPath: options.modelPath,
+      runtimePath: options.runtimePath,
       maxTokens: options.maxTokens,
       temperature: options.temperature,
     });
@@ -111,6 +135,9 @@ class NativeCpuInferenceService {
       await invoke<boolean>('native_inference_generate_stream', {
         requestId,
         prompt,
+        modelId: options.modelId,
+        modelPath: options.modelPath,
+        runtimePath: options.runtimePath,
         maxTokens: options.maxTokens,
         temperature: options.temperature,
       });
@@ -148,6 +175,27 @@ class NativeCpuInferenceService {
     } catch {
       return false;
     }
+  }
+
+  async downloadModelFromUrl(modelId: string, hfUrl: string): Promise<NativeCpuModelDownloadResult | null> {
+    if (!this.isTauriRuntime()) {
+      return null;
+    }
+
+    return invoke<NativeCpuModelDownloadResult>('native_inference_download_model', {
+      modelId,
+      hfUrl,
+    });
+  }
+
+  async downloadRuntimeFromUrl(runtimeUrl: string): Promise<NativeCpuRuntimeDownloadResult | null> {
+    if (!this.isTauriRuntime()) {
+      return null;
+    }
+
+    return invoke<NativeCpuRuntimeDownloadResult>('native_inference_download_runtime', {
+      runtimeUrl,
+    });
   }
 }
 

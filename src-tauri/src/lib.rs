@@ -19,6 +19,8 @@ pub fn run() {
       memory_store::upsert_memory_records,
       memory_store::delete_memory_records_by_prefixes,
       native_inference::native_inference_status,
+      native_inference::native_inference_download_model,
+      native_inference::native_inference_download_runtime,
       native_inference::native_inference_generate,
       native_inference::native_inference_generate_stream,
       native_inference::native_inference_stop,

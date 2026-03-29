@@ -45,10 +45,14 @@ class InferenceRuntimeService {
     }
 
     if (mode === 'webllm-webgpu') {
-      return capabilities.webgpu.available ? 'webllm-webgpu' : null;
+      return capabilities.webgpu.available
+        ? 'webllm-webgpu'
+        : capabilities.recommendedProvider;
     }
 
-    return capabilities.nativeCpu.available ? 'native-cpu' : null;
+    return capabilities.nativeCpu.available
+      ? 'native-cpu'
+      : capabilities.recommendedProvider;
   }
 
   getUnavailableReason(
@@ -81,8 +85,12 @@ class InferenceRuntimeService {
     };
   }
 
-  private async getNativeCpuStatus(): Promise<NativeCpuInferenceStatus> {
-    return nativeCpuInferenceService.getStatus();
+  private async getNativeCpuStatus(
+    modelId?: string,
+    modelPath?: string,
+    runtimePath?: string,
+  ): Promise<NativeCpuInferenceStatus> {
+    return nativeCpuInferenceService.getStatus(modelId, modelPath, runtimePath);
   }
 
   private getNativeCpuCapability(status: NativeCpuInferenceStatus): ProviderCapability {
@@ -93,10 +101,14 @@ class InferenceRuntimeService {
     };
   }
 
-  async getCapabilities(): Promise<InferenceRuntimeCapabilities> {
+  async getCapabilities(
+    modelId?: string,
+    modelPath?: string,
+    runtimePath?: string,
+  ): Promise<InferenceRuntimeCapabilities> {
     const [webgpu, nativeCpuStatus] = await Promise.all([
       this.detectWebGpuCapability(),
-      this.getNativeCpuStatus(),
+      this.getNativeCpuStatus(modelId, modelPath, runtimePath),
     ]);
     const nativeCpu = this.getNativeCpuCapability(nativeCpuStatus);
 

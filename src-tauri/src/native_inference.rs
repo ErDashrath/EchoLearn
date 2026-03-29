@@ -1,7 +1,8 @@
-use std::{
+                                                                                                            use std::{
+  collections::HashSet,
   env,
-  fs::File,
-  io::Read,
+  fs::{self, File},
+  io::{copy, Read},
   path::{Path, PathBuf},
   process::{Command, Stdio},
   sync::{Mutex, OnceLock},
@@ -11,6 +12,15 @@ use std::{
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tauri::Emitter;
+use tauri::Manager;
+
+const DEFAULT_DOWNLOAD_HOST_ALLOWLIST: &[&str] = &[
+  "huggingface.co",
+  "cdn-lfs.huggingface.co",
+  "github.com",
+  "objects.githubusercontent.com",
+  "release-assets.githubusercontent.com",
+];
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -18,6 +28,7 @@ pub struct NativeInferenceStatus {
   pub available: bool,
   pub runtime: String,
   pub model: String,
+  pub selected_model_id: String,
   pub runtime_sha256: String,
   pub model_sha256: String,
   pub profile: String,
@@ -35,6 +46,23 @@ pub struct NativeInferenceStreamChunk {
   pub error: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeModelDownloadResult {
+  pub model_id: String,
+  pub model_path: String,
+  pub sha256: String,
+  pub size_bytes: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeRuntimeDownloadResult {
+  pub runtime_path: String,
+  pub sha256: String,
+  pub size_bytes: u64,
+}
+
 static ACTIVE_NATIVE_PID: OnceLock<Mutex<Option<u32>>> = OnceLock::new();
 
 enum NativeCpuProfile {
@@ -48,6 +76,8 @@ struct NativeInferenceRuntimeConfig {
   threads: u32,
   max_tokens: u32,
   temperature: f32,
+  gpu_layers: Option<u32>,
+  main_gpu: Option<u32>,
 }
 
 fn active_pid_slot() -> &'static Mutex<Option<u32>> {
@@ -58,26 +88,214 @@ fn first_existing_path(candidates: &[PathBuf]) -> Option<PathBuf> {
   candidates.iter().find(|path| path.exists()).cloned()
 }
 
-fn command_exists_in_path(command: &str) -> bool {
-  Command::new("where")
-    .arg(command)
-    .output()
-    .map(|output| output.status.success())
+fn env_flag(name: &str) -> Option<bool> {
+  env::var(name).ok().and_then(|value| {
+    let normalized = value.trim().to_ascii_lowercase();
+    match normalized.as_str() {
+      "1" | "true" | "yes" | "on" => Some(true),
+      "0" | "false" | "no" | "off" => Some(false),
+      _ => None,
+    }
+  })
+}
+
+fn download_host_allowlist() -> Vec<String> {
+  let mut hosts: Vec<String> = DEFAULT_DOWNLOAD_HOST_ALLOWLIST
+    .iter()
+    .map(|host| host.to_string())
+    .collect();
+
+  if let Ok(raw) = env::var("MINDSCRIBE_NATIVE_DOWNLOAD_HOST_ALLOWLIST") {
+    for item in raw.split(',') {
+      let host = item.trim().to_ascii_lowercase();
+      if !host.is_empty() && !hosts.iter().any(|current| current == &host) {
+        hosts.push(host);
+      }
+    }
+  }
+
+  hosts
+}
+
+fn host_allowed(host: &str, allowlist: &[String]) -> bool {
+  let host = host.to_ascii_lowercase();
+  allowlist.iter().any(|allowed| {
+    host == *allowed || host.ends_with(&format!(".{allowed}"))
+  })
+}
+
+fn validated_download_url(raw_url: &str, label: &str) -> Result<String, String> {
+  let parsed = reqwest::Url::parse(raw_url)
+    .map_err(|error| format!("invalid {label} URL: {error}"))?;
+
+  if parsed.scheme() != "https" {
+    return Err(format!("{label} URL must use HTTPS."));
+  }
+
+  let host = parsed
+    .host_str()
+    .ok_or_else(|| format!("{label} URL must include a valid host."))?;
+
+  let allowlist = download_host_allowlist();
+  if !host_allowed(host, &allowlist) {
+    return Err(format!(
+      "{label} URL host '{host}' is not allowed. Configure MINDSCRIBE_NATIVE_DOWNLOAD_HOST_ALLOWLIST if needed."
+    ));
+  }
+
+  Ok(parsed.to_string())
+}
+
+fn hashes_required() -> bool {
+  env_flag("MINDSCRIBE_NATIVE_CPU_REQUIRE_HASHES")
+    .unwrap_or(!cfg!(debug_assertions))
+}
+
+fn append_runtime_candidates_from_dir(candidates: &mut Vec<PathBuf>, root: &Path) {
+  collect_executables(root, 3, candidates);
+}
+
+fn is_executable(path: &Path) -> bool {
+  path
+    .extension()
+    .map(|ext| ext.to_string_lossy().eq_ignore_ascii_case("exe"))
     .unwrap_or(false)
 }
 
-fn resolve_command_path(command: &str) -> Option<PathBuf> {
-  let output = Command::new("where").arg(command).output().ok()?;
-  if !output.status.success() {
-    return None;
+fn should_skip_dir(path: &Path) -> bool {
+  path
+    .file_name()
+    .map(|name| {
+      let value = name.to_string_lossy().to_ascii_lowercase();
+      matches!(value.as_str(), "node_modules" | "target" | "dist" | ".git")
+    })
+    .unwrap_or(false)
+}
+
+fn collect_executables(root: &Path, max_depth: usize, candidates: &mut Vec<PathBuf>) {
+  if max_depth == 0 || !root.exists() || !root.is_dir() {
+    return;
   }
 
+  if let Ok(entries) = fs::read_dir(root) {
+    for entry in entries.flatten() {
+      let path = entry.path();
+
+      if path.is_file() {
+        if is_executable(&path) {
+          candidates.push(path);
+        }
+        continue;
+      }
+
+      if path.is_dir() && !should_skip_dir(&path) {
+        collect_executables(&path, max_depth - 1, candidates);
+      }
+    }
+  }
+}
+
+fn is_gguf(path: &Path) -> bool {
+  path
+    .extension()
+    .map(|ext| ext.to_string_lossy().eq_ignore_ascii_case("gguf"))
+    .unwrap_or(false)
+}
+
+fn collect_gguf_files(root: &Path, max_depth: usize, candidates: &mut Vec<PathBuf>) {
+  if max_depth == 0 || !root.exists() || !root.is_dir() {
+    return;
+  }
+
+  if let Ok(entries) = fs::read_dir(root) {
+    for entry in entries.flatten() {
+      let path = entry.path();
+
+      if path.is_file() {
+        if is_gguf(&path) {
+          candidates.push(path);
+        }
+        continue;
+      }
+
+      if path.is_dir() && !should_skip_dir(&path) {
+        collect_gguf_files(&path, max_depth - 1, candidates);
+      }
+    }
+  }
+}
+
+fn dedupe_paths(paths: Vec<PathBuf>) -> Vec<PathBuf> {
+  let mut seen = HashSet::new();
+  let mut deduped = Vec::new();
+  for path in paths {
+    let normalized = path.to_string_lossy().to_ascii_lowercase();
+    if seen.insert(normalized) {
+      deduped.push(path);
+    }
+  }
+  deduped
+}
+
+fn runtime_probe_score(path: &Path) -> i32 {
+  let output = Command::new(path)
+    .arg("--help")
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped())
+    .output();
+
+  let Ok(output) = output else {
+    return 0;
+  };
+
   let stdout = String::from_utf8_lossy(&output.stdout);
-  stdout
-    .lines()
-    .map(str::trim)
-    .find(|line| !line.is_empty())
-    .map(PathBuf::from)
+  let stderr = String::from_utf8_lossy(&output.stderr);
+  let text = format!("{}\n{}", stdout, stderr).to_ascii_lowercase();
+
+  if text.trim().is_empty() {
+    return 0;
+  }
+
+  let mut score = 0;
+  if text.contains("gguf") {
+    score += 6;
+  }
+  if text.contains("--model") || text.contains(" -m ") {
+    score += 5;
+  }
+  if text.contains("--prompt") || text.contains(" -p ") {
+    score += 4;
+  }
+  if text.contains("--threads") {
+    score += 3;
+  }
+  if text.contains("--temp") || text.contains("temperature") {
+    score += 2;
+  }
+  if text.contains("inference") || text.contains("generate") {
+    score += 2;
+  }
+
+  score
+}
+
+fn candidate_roots() -> Vec<PathBuf> {
+  let mut roots = Vec::new();
+
+  if let Ok(current_dir) = env::current_dir() {
+    roots.push(current_dir);
+  }
+
+  if let Ok(exe) = env::current_exe() {
+    if let Some(parent) = exe.parent() {
+      roots.push(parent.to_path_buf());
+      if let Some(grand_parent) = parent.parent() {
+        roots.push(grand_parent.to_path_buf());
+      }
+    }
+  }
+
+  roots
 }
 
 fn native_runtime_candidates() -> Vec<PathBuf> {
@@ -87,20 +305,15 @@ fn native_runtime_candidates() -> Vec<PathBuf> {
     candidates.push(PathBuf::from(explicit));
   }
 
-  candidates.push(PathBuf::from("src-tauri/bin/llm/llama-cli.exe"));
-  candidates.push(PathBuf::from("src-tauri/bin/llm/main.exe"));
-  candidates.push(PathBuf::from("bin/llm/llama-cli.exe"));
-  candidates.push(PathBuf::from("bin/llm/main.exe"));
-
-  if let Ok(exe) = env::current_exe() {
-    if let Some(parent) = exe.parent() {
-      candidates.push(parent.join("llama-cli.exe"));
-      candidates.push(parent.join("llm").join("llama-cli.exe"));
-      candidates.push(parent.join("bin").join("llm").join("llama-cli.exe"));
-    }
+  if let Ok(runtime_dir) = env::var("MINDSCRIBE_NATIVE_CPU_RUNTIME_DIR") {
+    append_runtime_candidates_from_dir(&mut candidates, &PathBuf::from(runtime_dir));
   }
 
-  candidates
+  for root in candidate_roots() {
+    append_runtime_candidates_from_dir(&mut candidates, &root);
+  }
+
+  dedupe_paths(candidates)
 }
 
 fn native_model_candidates() -> Vec<PathBuf> {
@@ -110,40 +323,176 @@ fn native_model_candidates() -> Vec<PathBuf> {
     candidates.push(PathBuf::from(explicit));
   }
 
-  candidates.push(PathBuf::from("src-tauri/bin/llm/models/chat.gguf"));
-  candidates.push(PathBuf::from("src-tauri/bin/llm/models/model.gguf"));
-  candidates.push(PathBuf::from("src-tauri/bin/llm/model.gguf"));
-  candidates.push(PathBuf::from("bin/llm/models/chat.gguf"));
-  candidates.push(PathBuf::from("bin/llm/models/model.gguf"));
-  candidates.push(PathBuf::from("public/models/llm/chat.gguf"));
-  candidates.push(PathBuf::from("public/models/llm/model.gguf"));
+  if let Ok(model_dir) = env::var("MINDSCRIBE_NATIVE_CPU_MODEL_DIR") {
+    collect_gguf_files(&PathBuf::from(model_dir), 6, &mut candidates);
+  }
 
-  if let Ok(exe) = env::current_exe() {
-    if let Some(parent) = exe.parent() {
-      candidates.push(parent.join("llm").join("models").join("chat.gguf"));
-      candidates.push(parent.join("llm").join("models").join("model.gguf"));
-      candidates.push(parent.join("bin").join("llm").join("models").join("chat.gguf"));
-      candidates.push(parent.join("bin").join("llm").join("models").join("model.gguf"));
+  for root in candidate_roots() {
+    collect_gguf_files(&root, 6, &mut candidates);
+  }
+
+  dedupe_paths(candidates)
+}
+
+fn resolve_runtime_command(runtime_path: Option<&str>) -> Option<PathBuf> {
+  if let Some(explicit_path) = runtime_path {
+    let explicit = PathBuf::from(explicit_path);
+    if explicit.exists() {
+      return Some(explicit);
     }
   }
 
-  candidates
-}
-
-fn resolve_runtime_command() -> Option<PathBuf> {
-  if let Some(path) = first_existing_path(&native_runtime_candidates()) {
-    return Some(path);
+  if let Ok(explicit) = env::var("MINDSCRIBE_NATIVE_CPU_RUNTIME") {
+    let explicit = PathBuf::from(explicit);
+    if explicit.exists() {
+      return Some(explicit);
+    }
   }
 
-  if command_exists_in_path("llama-cli.exe") {
-    return resolve_command_path("llama-cli.exe");
+  let candidates = native_runtime_candidates();
+  let mut best: Option<(i32, PathBuf)> = None;
+
+  for candidate in candidates {
+    if !candidate.exists() || !candidate.is_file() {
+      continue;
+    }
+
+    let score = runtime_probe_score(&candidate);
+    if score <= 0 {
+      continue;
+    }
+
+    match &best {
+      Some((best_score, _)) if *best_score >= score => {}
+      _ => best = Some((score, candidate)),
+    }
+  }
+
+  if let Some((_, path)) = best {
+    return Some(path);
   }
 
   None
 }
 
-fn resolve_model_path() -> Option<PathBuf> {
-  first_existing_path(&native_model_candidates())
+fn normalized_tokens(input: &str) -> Vec<String> {
+  input
+    .to_ascii_lowercase()
+    .split(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '.'))
+    .filter(|token| !token.is_empty())
+    .map(String::from)
+    .collect()
+}
+
+fn best_model_candidate(preferred_model_id: &str, candidates: &[PathBuf]) -> Option<PathBuf> {
+  let preferred_tokens = normalized_tokens(preferred_model_id);
+  if preferred_tokens.is_empty() {
+    return None;
+  }
+
+  let mut best: Option<(i32, PathBuf)> = None;
+  for candidate in candidates {
+    if !candidate.exists() {
+      continue;
+    }
+
+    let file_name = candidate
+      .file_name()
+      .map(|value| value.to_string_lossy().to_ascii_lowercase())
+      .unwrap_or_default();
+
+    let mut score = 0;
+    for token in &preferred_tokens {
+      if token.len() < 2 {
+        continue;
+      }
+
+      if file_name.contains(token) {
+        score += if token.contains('b') { 4 } else { 2 };
+      }
+    }
+
+    if preferred_tokens.iter().any(|token| token.contains("llama")) && file_name.contains("llama") {
+      score += 6;
+    }
+    if preferred_tokens.iter().any(|token| token.contains("qwen")) && file_name.contains("qwen") {
+      score += 6;
+    }
+    if preferred_tokens.iter().any(|token| token.contains("phi")) && file_name.contains("phi") {
+      score += 6;
+    }
+    if preferred_tokens.iter().any(|token| token.contains("gemma")) && file_name.contains("gemma") {
+      score += 6;
+    }
+
+    if score <= 0 {
+      continue;
+    }
+
+    match &best {
+      Some((best_score, _)) if *best_score >= score => {}
+      _ => {
+        best = Some((score, candidate.clone()));
+      }
+    }
+  }
+
+  best.map(|(_, path)| path)
+}
+
+fn resolve_model_path(model_path: Option<&str>, preferred_model_id: Option<&str>) -> Option<PathBuf> {
+  if let Some(explicit_path) = model_path {
+    let explicit = PathBuf::from(explicit_path);
+    if explicit.exists() {
+      return Some(explicit);
+    }
+  }
+
+  if let Some(preferred) = preferred_model_id {
+    if let Some(mapped) = resolve_model_path_from_map(preferred) {
+      return Some(mapped);
+    }
+  }
+
+  let candidates = native_model_candidates();
+
+  if let Some(preferred) = preferred_model_id {
+    if let Some(best) = best_model_candidate(preferred, &candidates) {
+      return Some(best);
+    }
+  }
+
+  first_existing_path(&candidates)
+}
+
+fn resolve_model_path_from_map(preferred_model_id: &str) -> Option<PathBuf> {
+  let raw = env::var("MINDSCRIBE_NATIVE_CPU_MODEL_MAP").ok()?;
+  let map: serde_json::Value = serde_json::from_str(&raw).ok()?;
+  let object = map.as_object()?;
+
+  let direct = object.get(preferred_model_id).and_then(|value| value.as_str());
+  if let Some(path) = direct {
+    let resolved = PathBuf::from(path);
+    if resolved.exists() {
+      return Some(resolved);
+    }
+  }
+
+  let normalized_preferred = preferred_model_id.to_ascii_lowercase();
+  for (key, value) in object {
+    if !normalized_preferred.contains(&key.to_ascii_lowercase()) {
+      continue;
+    }
+
+    if let Some(path) = value.as_str() {
+      let resolved = PathBuf::from(path);
+      if resolved.exists() {
+        return Some(resolved);
+      }
+    }
+  }
+
+  None
 }
 
 fn detect_profile() -> NativeCpuProfile {
@@ -215,11 +564,68 @@ fn build_runtime_config(max_tokens: Option<u32>, temperature: Option<f32>) -> Na
     .unwrap_or_else(|| profile_default_temperature(&profile))
     .clamp(0.0, 1.5);
 
+  let gpu_layers = env::var("MINDSCRIBE_NATIVE_GPU_LAYERS")
+    .ok()
+    .and_then(|value| value.parse::<u32>().ok())
+    .filter(|value| *value > 0);
+
+  let main_gpu = env::var("MINDSCRIBE_NATIVE_MAIN_GPU")
+    .ok()
+    .and_then(|value| value.parse::<u32>().ok());
+
   NativeInferenceRuntimeConfig {
     profile,
     threads,
     max_tokens,
     temperature,
+    gpu_layers,
+    main_gpu,
+  }
+}
+
+fn runtime_help(runtime: &str) -> String {
+  let output = Command::new(runtime)
+    .arg("--help")
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped())
+    .output();
+
+  let Ok(output) = output else {
+    return String::new();
+  };
+
+  format!(
+    "{}\n{}",
+    String::from_utf8_lossy(&output.stdout),
+    String::from_utf8_lossy(&output.stderr)
+  )
+  .to_ascii_lowercase()
+}
+
+fn append_native_gpu_args(cmd: &mut Command, runtime: &str, config: &NativeInferenceRuntimeConfig) {
+  let Some(gpu_layers) = config.gpu_layers else {
+    return;
+  };
+
+  let help = runtime_help(runtime);
+  if help.is_empty() {
+    return;
+  }
+
+  if help.contains("--n-gpu-layers") {
+    cmd.arg("--n-gpu-layers").arg(gpu_layers.to_string());
+  } else if help.contains("-ngl") {
+    cmd.arg("-ngl").arg(gpu_layers.to_string());
+  } else if help.contains("--gpu-layers") {
+    cmd.arg("--gpu-layers").arg(gpu_layers.to_string());
+  }
+
+  if let Some(main_gpu) = config.main_gpu {
+    if help.contains("--main-gpu") {
+      cmd.arg("--main-gpu").arg(main_gpu.to_string());
+    } else if help.contains("-mg") {
+      cmd.arg("-mg").arg(main_gpu.to_string());
+    }
   }
 }
 
@@ -273,6 +679,21 @@ fn verify_hash(label: &str, actual: &str, expected: Option<String>) -> Result<()
   ))
 }
 
+fn verify_hash_if_required(label: &str, actual: &str, expected: Option<String>) -> Result<(), String> {
+  if !hashes_required() {
+    if let Some(expected) = expected {
+      if actual != expected {
+        return Err(format!(
+          "Integrity check failed for {label}. Expected {expected}, got {actual}."
+        ));
+      }
+    }
+    return Ok(());
+  }
+
+  verify_hash(label, actual, expected)
+}
+
 fn emit_stream_chunk(
   app: &tauri::AppHandle,
   request_id: &str,
@@ -290,13 +711,174 @@ fn emit_stream_chunk(
   let _ = app.emit("native-inference-stream", payload);
 }
 
+fn sanitize_filename(value: &str) -> String {
+  let sanitized: String = value
+    .chars()
+    .map(|ch| {
+      if ch.is_ascii_alphanumeric() || ch == '.' || ch == '_' || ch == '-' {
+        ch
+      } else {
+        '_'
+      }
+    })
+    .collect();
+
+  if sanitized.is_empty() {
+    String::from("model")
+  } else {
+    sanitized
+  }
+}
+
 #[tauri::command]
-pub fn native_inference_status() -> NativeInferenceStatus {
+pub fn native_inference_download_model(
+  app: tauri::AppHandle,
+  model_id: String,
+  hf_url: String,
+) -> Result<NativeModelDownloadResult, String> {
+  if !cfg!(target_os = "windows") {
+    return Err(String::from("Native CPU model download is currently implemented for Windows only."));
+  }
+
+  let model_id = model_id.trim().to_string();
+  let hf_url = hf_url.trim().to_string();
+  if model_id.is_empty() {
+    return Err(String::from("modelId cannot be empty."));
+  }
+  if hf_url.is_empty() {
+    return Err(String::from("hfUrl cannot be empty."));
+  }
+  let hf_url = validated_download_url(&hf_url, "Model")?;
+
+  let app_data_dir = app
+    .path()
+    .app_data_dir()
+    .map_err(|error| format!("failed to resolve app data directory: {error}"))?;
+
+  let models_dir = app_data_dir.join("llm").join("models");
+  fs::create_dir_all(&models_dir)
+    .map_err(|error| format!("failed to create model directory {}: {error}", models_dir.display()))?;
+
+  let file_name = format!("{}.gguf", sanitize_filename(&model_id));
+  let model_path = models_dir.join(file_name);
+
+  if !model_path.exists() {
+    let client = reqwest::blocking::Client::builder()
+      .user_agent("MindScribe-Native-Model-Downloader/1.0")
+      .build()
+      .map_err(|error| format!("failed to initialize HTTP client: {error}"))?;
+
+    let mut response = client
+      .get(&hf_url)
+      .send()
+      .map_err(|error| format!("failed to download model from Hugging Face: {error}"))?;
+
+    if !response.status().is_success() {
+      return Err(format!(
+        "model download failed with status {} from {}",
+        response.status(),
+        hf_url
+      ));
+    }
+
+    let mut file = File::create(&model_path)
+      .map_err(|error| format!("failed to create {}: {error}", model_path.display()))?;
+
+    copy(&mut response, &mut file)
+      .map_err(|error| format!("failed to write {}: {error}", model_path.display()))?;
+  }
+
+  let digest = compute_sha256(&model_path)?;
+  let size_bytes = fs::metadata(&model_path)
+    .map(|metadata| metadata.len())
+    .map_err(|error| format!("failed to stat {}: {error}", model_path.display()))?;
+
+  Ok(NativeModelDownloadResult {
+    model_id,
+    model_path: model_path.to_string_lossy().to_string(),
+    sha256: digest,
+    size_bytes,
+  })
+}
+
+#[tauri::command]
+pub fn native_inference_download_runtime(
+  app: tauri::AppHandle,
+  runtime_url: String,
+) -> Result<NativeRuntimeDownloadResult, String> {
+  if !cfg!(target_os = "windows") {
+    return Err(String::from("Native CPU runtime download is currently implemented for Windows only."));
+  }
+
+  let runtime_url = runtime_url.trim().to_string();
+  if runtime_url.is_empty() {
+    return Err(String::from("runtimeUrl cannot be empty."));
+  }
+  let runtime_url = validated_download_url(&runtime_url, "Runtime")?;
+
+  let app_data_dir = app
+    .path()
+    .app_data_dir()
+    .map_err(|error| format!("failed to resolve app data directory: {error}"))?;
+
+  let runtime_dir = app_data_dir.join("llm").join("runtime");
+  fs::create_dir_all(&runtime_dir)
+    .map_err(|error| format!("failed to create runtime directory {}: {error}", runtime_dir.display()))?;
+
+  let runtime_path = runtime_dir.join("native-runtime.exe");
+
+  if !runtime_path.exists() {
+    let client = reqwest::blocking::Client::builder()
+      .user_agent("MindScribe-Native-Runtime-Downloader/1.0")
+      .build()
+      .map_err(|error| format!("failed to initialize HTTP client: {error}"))?;
+
+    let mut response = client
+      .get(&runtime_url)
+      .send()
+      .map_err(|error| format!("failed to download runtime from URL: {error}"))?;
+
+    if !response.status().is_success() {
+      return Err(format!(
+        "runtime download failed with status {} from {}",
+        response.status(),
+        runtime_url
+      ));
+    }
+
+    let mut file = File::create(&runtime_path)
+      .map_err(|error| format!("failed to create {}: {error}", runtime_path.display()))?;
+
+    copy(&mut response, &mut file)
+      .map_err(|error| format!("failed to write {}: {error}", runtime_path.display()))?;
+  }
+
+  let digest = compute_sha256(&runtime_path)?;
+  let size_bytes = fs::metadata(&runtime_path)
+    .map(|metadata| metadata.len())
+    .map_err(|error| format!("failed to stat {}: {error}", runtime_path.display()))?;
+
+  Ok(NativeRuntimeDownloadResult {
+    runtime_path: runtime_path.to_string_lossy().to_string(),
+    sha256: digest,
+    size_bytes,
+  })
+}
+
+#[tauri::command]
+pub fn native_inference_status(
+  model_id: Option<String>,
+  model_path: Option<String>,
+  runtime_path: Option<String>,
+) -> NativeInferenceStatus {
+  let selected_model_id = model_id.unwrap_or_default();
+
   if !cfg!(target_os = "windows") {
     return NativeInferenceStatus {
       available: false,
       runtime: String::new(),
       model: String::new(),
+      selected_model_id,
         runtime_sha256: String::new(),
         model_sha256: String::new(),
         profile: String::new(),
@@ -306,13 +888,14 @@ pub fn native_inference_status() -> NativeInferenceStatus {
     };
   }
 
-  let runtime = match resolve_runtime_command() {
+  let runtime = match resolve_runtime_command(runtime_path.as_deref()) {
     Some(runtime) => runtime,
     None => {
       return NativeInferenceStatus {
         available: false,
         runtime: String::new(),
         model: String::new(),
+        selected_model_id,
         runtime_sha256: String::new(),
         model_sha256: String::new(),
         profile: String::new(),
@@ -325,13 +908,21 @@ pub fn native_inference_status() -> NativeInferenceStatus {
     }
   };
 
-  let model = match resolve_model_path() {
+  let model = match resolve_model_path(
+    model_path.as_deref(),
+    if selected_model_id.is_empty() {
+      None
+    } else {
+      Some(selected_model_id.as_str())
+    },
+  ) {
     Some(model) => model,
     None => {
       return NativeInferenceStatus {
         available: false,
         runtime: runtime.to_string_lossy().to_string(),
         model: String::new(),
+        selected_model_id,
         runtime_sha256: String::new(),
         model_sha256: String::new(),
         profile: String::new(),
@@ -351,6 +942,7 @@ pub fn native_inference_status() -> NativeInferenceStatus {
         available: false,
         runtime: runtime.to_string_lossy().to_string(),
         model: model.to_string_lossy().to_string(),
+        selected_model_id,
         runtime_sha256: String::new(),
         model_sha256: String::new(),
         profile: String::new(),
@@ -368,6 +960,7 @@ pub fn native_inference_status() -> NativeInferenceStatus {
         available: false,
         runtime: runtime.to_string_lossy().to_string(),
         model: model.to_string_lossy().to_string(),
+        selected_model_id,
         runtime_sha256: runtime_hash,
         model_sha256: String::new(),
         profile: String::new(),
@@ -378,11 +971,12 @@ pub fn native_inference_status() -> NativeInferenceStatus {
     }
   };
 
-  if let Err(reason) = verify_hash("runtime", &runtime_hash, expected_runtime_hash()) {
+  if let Err(reason) = verify_hash_if_required("runtime", &runtime_hash, expected_runtime_hash()) {
     return NativeInferenceStatus {
       available: false,
       runtime: runtime.to_string_lossy().to_string(),
       model: model.to_string_lossy().to_string(),
+      selected_model_id,
       runtime_sha256: runtime_hash,
       model_sha256: model_hash,
       profile: String::new(),
@@ -392,11 +986,12 @@ pub fn native_inference_status() -> NativeInferenceStatus {
     };
   }
 
-  if let Err(reason) = verify_hash("model", &model_hash, expected_model_hash()) {
+  if let Err(reason) = verify_hash_if_required("model", &model_hash, expected_model_hash()) {
     return NativeInferenceStatus {
       available: false,
       runtime: runtime.to_string_lossy().to_string(),
       model: model.to_string_lossy().to_string(),
+      selected_model_id,
       runtime_sha256: runtime_hash,
       model_sha256: model_hash,
       profile: String::new(),
@@ -412,6 +1007,7 @@ pub fn native_inference_status() -> NativeInferenceStatus {
     available: true,
     runtime: runtime.to_string_lossy().to_string(),
     model: model.to_string_lossy().to_string(),
+    selected_model_id,
     runtime_sha256: runtime_hash,
     model_sha256: model_hash,
     profile: profile_name(&runtime_config.profile),
@@ -424,17 +1020,17 @@ pub fn native_inference_status() -> NativeInferenceStatus {
 #[tauri::command]
 pub fn native_inference_generate(
   prompt: String,
+  model_id: Option<String>,
+  model_path: Option<String>,
+  runtime_path: Option<String>,
   max_tokens: Option<u32>,
   temperature: Option<f32>,
 ) -> Result<String, String> {
-  let _ = max_tokens;
-  let _ = temperature;
-
   if prompt.trim().is_empty() {
     return Err(String::from("Prompt cannot be empty."));
   }
 
-  let status = native_inference_status();
+  let status = native_inference_status(model_id, model_path, runtime_path);
   if !status.available {
     return Err(status.reason);
   }
@@ -443,7 +1039,7 @@ pub fn native_inference_generate(
   let model = status.model;
   let runtime_config = build_runtime_config(max_tokens, temperature);
 
-  let mut cmd = Command::new(runtime);
+  let mut cmd = Command::new(&runtime);
   cmd
     .arg("-m")
     .arg(model)
@@ -454,9 +1050,11 @@ pub fn native_inference_generate(
     .arg("--temp")
     .arg(format!("{:.2}", runtime_config.temperature))
     .arg("--threads")
-    .arg(runtime_config.threads.to_string())
-    .stdout(Stdio::piped())
-    .stderr(Stdio::piped());
+    .arg(runtime_config.threads.to_string());
+
+  append_native_gpu_args(&mut cmd, &runtime, &runtime_config);
+
+  cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
   let child = cmd
     .spawn()
@@ -506,6 +1104,9 @@ pub fn native_inference_generate_stream(
   app: tauri::AppHandle,
   request_id: String,
   prompt: String,
+  model_id: Option<String>,
+  model_path: Option<String>,
+  runtime_path: Option<String>,
   max_tokens: Option<u32>,
   temperature: Option<f32>,
 ) -> Result<bool, String> {
@@ -513,16 +1114,25 @@ pub fn native_inference_generate_stream(
     return Err(String::from("Prompt cannot be empty."));
   }
 
-  let status = native_inference_status();
-  if !status.available {
-    return Err(status.reason);
-  }
-
-  let runtime = status.runtime;
-  let model = status.model;
+  let runtime = resolve_runtime_command(runtime_path.as_deref())
+    .ok_or_else(|| String::from("Native CPU runtime binary not found."))?
+    .to_string_lossy()
+    .to_string();
+  let selected_model_id = model_id.unwrap_or_default();
+  let model = resolve_model_path(
+    model_path.as_deref(),
+    if selected_model_id.is_empty() {
+      None
+    } else {
+      Some(selected_model_id.as_str())
+    },
+  )
+  .ok_or_else(|| String::from("Native CPU model file not found."))?
+  .to_string_lossy()
+  .to_string();
   let runtime_config = build_runtime_config(max_tokens, temperature);
 
-  let mut cmd = Command::new(runtime);
+  let mut cmd = Command::new(&runtime);
   cmd
     .arg("-m")
     .arg(model)
@@ -533,9 +1143,11 @@ pub fn native_inference_generate_stream(
     .arg("--temp")
     .arg(format!("{:.2}", runtime_config.temperature))
     .arg("--threads")
-    .arg(runtime_config.threads.to_string())
-    .stdout(Stdio::piped())
-    .stderr(Stdio::piped());
+    .arg(runtime_config.threads.to_string());
+
+  append_native_gpu_args(&mut cmd, &runtime, &runtime_config);
+
+  cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
   let mut child = cmd
     .spawn()
@@ -655,4 +1267,48 @@ pub fn native_inference_stop() -> bool {
   }
 
   false
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn sanitize_filename_replaces_unsafe_characters() {
+    let value = "qwen2.5/1.5b:instruct?*";
+    let sanitized = sanitize_filename(value);
+    assert_eq!(sanitized, "qwen2.5_1.5b_instruct__");
+  }
+
+  #[test]
+  fn sanitize_filename_uses_default_when_empty() {
+    let sanitized = sanitize_filename("");
+    assert_eq!(sanitized, "model");
+  }
+
+  #[test]
+  fn host_allowed_accepts_exact_and_subdomain_matches() {
+    let allowlist = vec![String::from("huggingface.co")];
+    assert!(host_allowed("huggingface.co", &allowlist));
+    assert!(host_allowed("cdn-lfs.huggingface.co", &allowlist));
+    assert!(!host_allowed("evil-example.com", &allowlist));
+  }
+
+  #[test]
+  fn validated_download_url_rejects_non_https_urls() {
+    let result = validated_download_url("http://huggingface.co/model.gguf", "Model");
+    assert!(result.is_err());
+  }
+
+  #[test]
+  fn validated_download_url_accepts_default_allowlisted_hosts() {
+    let result = validated_download_url("https://huggingface.co/file.gguf", "Model");
+    assert!(result.is_ok());
+  }
+
+  #[test]
+  fn validated_download_url_rejects_unknown_hosts() {
+    let result = validated_download_url("https://example.com/file.gguf", "Model");
+    assert!(result.is_err());
+  }
 }

@@ -3,10 +3,6 @@ export const API_CONFIG = {
   // Base URL for your backend API
   BASE_URL: import.meta.env.VITE_API_BASE_URL || '',
   
-  // Ollama configuration (if you want to make direct calls from frontend)
-  OLLAMA_BASE_URL: import.meta.env.VITE_OLLAMA_BASE_URL || 'https://husband-criminal-differential-vitamin.trycloudflare.com',
-  OLLAMA_FALLBACK_URL: import.meta.env.VITE_OLLAMA_FALLBACK_URL || 'http://localhost:11434',
-  
   // Default timeout for API requests
   TIMEOUT: 30000,
 } as const;

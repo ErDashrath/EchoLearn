@@ -24,6 +24,7 @@ export function useChat(sessionId?: string, mentalHealthContext?: MentalHealthCo
   const [focus, setFocus] = useState<FocusMode>("fluency");
   const [ttsEnabled, setTtsEnabled] = useState(ttsService.getEnabled());
   const [webllmEnabled, setWebllmEnabled] = useState(true); // Enable WebLLM by default
+  const [webgpuAvailable, setWebgpuAvailable] = useState<boolean | null>(null);
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [isWebllmGenerating, setIsWebllmGenerating] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -57,6 +58,29 @@ export function useChat(sessionId?: string, mentalHealthContext?: MentalHealthCo
     
     return () => clearInterval(interval);
   }, [selectedModel]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const detectWebGPU = async () => {
+      try {
+        const supported = await webllmService.checkWebGPUSupport();
+        if (mounted) {
+          setWebgpuAvailable(supported);
+        }
+      } catch {
+        if (mounted) {
+          setWebgpuAvailable(false);
+        }
+      }
+    };
+
+    detectWebGPU();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // Fetch current session
   const { data: session, isLoading: sessionLoading } = useQuery({
@@ -212,7 +236,7 @@ export function useChat(sessionId?: string, mentalHealthContext?: MentalHealthCo
     if (!content.trim()) return;
     
     // Prefer WebLLM if available and enabled
-    if (webllmEnabled && selectedModel) {
+    if (webllmEnabled && webgpuAvailable && selectedModel) {
       // Auto-load the model if it's cached but not loaded
       if (webllmService.isModelCached(selectedModel) && !webllmService.isModelLoaded()) {
         try {
@@ -224,8 +248,10 @@ export function useChat(sessionId?: string, mentalHealthContext?: MentalHealthCo
       
       // Use WebLLM if model is loaded
       if (webllmService.isModelLoaded()) {
-        await sendWebLLMMessage(content);
-        return;
+        const handledByWebLLM = await sendWebLLMMessage(content);
+        if (handledByWebLLM) {
+          return;
+        }
       }
     }
     
@@ -245,16 +271,20 @@ export function useChat(sessionId?: string, mentalHealthContext?: MentalHealthCo
     } else {
       sendMessageMutation.mutate(content);
     }
-  }, [currentSessionId, mode, focus, createSessionMutation, sendMessageMutation, webllmEnabled, selectedModel]);
+  }, [
+    currentSessionId,
+    mode,
+    focus,
+    createSessionMutation,
+    sendMessageMutation,
+    webllmEnabled,
+    webgpuAvailable,
+    selectedModel,
+  ]);
 
-  const sendWebLLMMessage = useCallback(async (content: string) => {
+  const sendWebLLMMessage = useCallback(async (content: string): Promise<boolean> => {
     if (!selectedModel || !webllmService.isModelLoaded()) {
-      toast({
-        title: "Model Not Ready",
-        description: "Please wait for the model to load or select a different model",
-        variant: "destructive"
-      });
-      return;
+      return false;
     }
 
     setIsWebllmGenerating(true);
@@ -361,14 +391,20 @@ export function useChat(sessionId?: string, mentalHealthContext?: MentalHealthCo
       }
 
       scrollToBottom();
+      return true;
 
     } catch (error) {
       console.error('WebLLM generation error:', error);
       toast({
-        title: "Generation Failed",
-        description: error instanceof Error ? error.message : "Failed to generate response",
-        variant: "destructive"
+        title: "Local generation unavailable",
+        description: "Switching to backend fallback for this message.",
       });
+      if (currentSessionId) {
+        queryClient.invalidateQueries({
+          queryKey: ["/api/chat/sessions", currentSessionId, "messages"],
+        });
+      }
+      return false;
     } finally {
       setIsWebllmGenerating(false);
     }
@@ -385,13 +421,31 @@ export function useChat(sessionId?: string, mentalHealthContext?: MentalHealthCo
   }, [toast]);
 
   const toggleWebLLM = useCallback((enabled: boolean) => {
+    if (enabled && webgpuAvailable === false) {
+      toast({
+        title: "WebGPU unavailable",
+        description: "This device cannot run WebLLM. The app will use fallback inference.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setWebllmEnabled(enabled);
     if (!enabled) {
       setSelectedModel(null);
     }
-  }, []);
+  }, [toast, webgpuAvailable]);
 
   const selectWebLLMModel = useCallback(async (modelId: string) => {
+    if (webgpuAvailable === false) {
+      toast({
+        title: "WebGPU unavailable",
+        description: "WebLLM requires WebGPU on this device.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     if (!webllmService.isModelCached(modelId)) {
       toast({
         title: "Model Not Downloaded",
@@ -417,7 +471,7 @@ export function useChat(sessionId?: string, mentalHealthContext?: MentalHealthCo
         variant: "destructive"
       });
     }
-  }, [toast]);
+  }, [toast, webgpuAvailable]);
 
   const regenerateMessage = useCallback((messageId: string) => {
     regenerateMessageMutation.mutate(messageId);
@@ -501,6 +555,7 @@ export function useChat(sessionId?: string, mentalHealthContext?: MentalHealthCo
     
     // WebLLM data
     webllmEnabled,
+    webgpuAvailable,
     selectedModel,
     isWebllmGenerating,
     

@@ -125,6 +125,17 @@ export default function ChatPage() {
     : '';
 
   const nativeStatus = inferenceCapabilities?.nativeCpuStatus;
+  const webgpuAvailable = inferenceCapabilities?.webgpu.available ?? false;
+  const nativeCpuAvailable = inferenceCapabilities?.nativeCpu.available ?? false;
+  const webgpuReason = inferenceCapabilities?.webgpu.reason || 'WebGPU provider is unavailable.';
+  const nativeCpuReason = inferenceCapabilities?.nativeCpu.reason || 'Native CPU provider is unavailable.';
+  const fallbackNotice = inferenceSelectionMode !== 'auto' && activeInferenceProvider
+    ? inferenceSelectionMode === 'webllm-webgpu' && activeInferenceProvider === 'native-cpu'
+      ? 'WebGPU is unavailable. Using Native CPU fallback.'
+      : inferenceSelectionMode === 'native-cpu' && activeInferenceProvider === 'webllm-webgpu'
+        ? 'Native CPU is unavailable. Using WebGPU fallback.'
+        : ''
+    : '';
 
   return (
     <div className="journal-shell min-h-screen bg-[var(--bg)] text-[var(--text-primary)] flex flex-col [font-family:Inter,sans-serif]">
@@ -183,10 +194,16 @@ export default function ChatPage() {
             <button
               type="button"
               onClick={() => setInferenceSelectionMode('webllm-webgpu')}
+              disabled={!!inferenceCapabilities && !webgpuAvailable}
+              title={!!inferenceCapabilities && !webgpuAvailable ? webgpuReason : 'Use WebGPU inference'}
               className={`px-2 py-1 text-xs border-l border-[var(--inner)] ${
                 inferenceSelectionMode === 'webllm-webgpu'
                   ? 'bg-[var(--inner)] text-[var(--text-primary)]'
                   : 'text-[var(--text-secondary)] hover:bg-[var(--inner)]'
+              } ${
+                !!inferenceCapabilities && !webgpuAvailable
+                  ? 'opacity-50 cursor-not-allowed hover:bg-transparent'
+                  : ''
               }`}
             >
               WebGPU
@@ -194,10 +211,16 @@ export default function ChatPage() {
             <button
               type="button"
               onClick={() => setInferenceSelectionMode('native-cpu')}
+              disabled={!!inferenceCapabilities && !nativeCpuAvailable}
+              title={!!inferenceCapabilities && !nativeCpuAvailable ? nativeCpuReason : 'Use Native CPU inference'}
               className={`px-2 py-1 text-xs border-l border-[var(--inner)] ${
                 inferenceSelectionMode === 'native-cpu'
                   ? 'bg-[var(--inner)] text-[var(--text-primary)]'
                   : 'text-[var(--text-secondary)] hover:bg-[var(--inner)]'
+              } ${
+                !!inferenceCapabilities && !nativeCpuAvailable
+                  ? 'opacity-50 cursor-not-allowed hover:bg-transparent'
+                  : ''
               }`}
             >
               Native CPU
@@ -212,6 +235,11 @@ export default function ChatPage() {
           >
             Inference: {providerLabel} ({inferenceSelectionMode})
           </span>
+          {fallbackNotice && (
+            <span className="text-xs px-2 py-1 rounded-full border border-amber-500/30 text-amber-200 bg-amber-500/10">
+              {fallbackNotice}
+            </span>
+          )}
           <Button
             variant="ghost"
             size="sm"
