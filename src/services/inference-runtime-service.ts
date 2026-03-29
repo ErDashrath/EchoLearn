@@ -1,4 +1,5 @@
 import { webllmService } from '@/services/webllm-service';
+import { nativeCpuInferenceService } from '@/services/native-cpu-inference-service';
 
 export type InferenceProviderId = 'webllm-webgpu' | 'native-cpu';
 
@@ -16,10 +17,6 @@ export interface InferenceRuntimeCapabilities {
 }
 
 class InferenceRuntimeService {
-  private isTauriRuntime(): boolean {
-    return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-  }
-
   private async detectWebGpuCapability(): Promise<ProviderCapability> {
     const supported = await webllmService.checkWebGPUSupport();
     if (supported) {
@@ -34,20 +31,13 @@ class InferenceRuntimeService {
   }
 
   // Phase 1 scaffold: native CPU runtime is not yet wired.
-  // This placeholder keeps routing deterministic while backend commands are implemented.
   private async detectNativeCpuCapability(): Promise<ProviderCapability> {
-    if (!this.isTauriRuntime()) {
-      return {
-        provider: 'native-cpu',
-        available: false,
-        reason: 'Native CPU inference requires desktop runtime (Tauri).',
-      };
-    }
+    const status = await nativeCpuInferenceService.getStatus();
 
     return {
       provider: 'native-cpu',
-      available: false,
-      reason: 'Native CPU provider is not wired yet (Phase 3 integration pending).',
+      available: status.available,
+      reason: status.reason || undefined,
     };
   }
 

@@ -1,5 +1,6 @@
 mod device_store;
 mod memory_store;
+mod native_inference;
 mod voice_native;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -17,6 +18,9 @@ pub fn run() {
       memory_store::get_user_memory_records,
       memory_store::upsert_memory_records,
       memory_store::delete_memory_records_by_prefixes,
+      native_inference::native_inference_status,
+      native_inference::native_inference_generate,
+      native_inference::native_inference_stop,
       voice_native::native_voice_is_available,
       voice_native::native_piper_is_available,
       voice_native::native_piper_tts,
