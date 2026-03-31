@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Shield, User, Bell, Brain, Download, RefreshCw, Trash2, DatabaseZap, FileDown, Zap } from 'lucide-react';
+import { Shield, User, Bell, Brain, RefreshCw, Trash2, DatabaseZap, FileDown, Zap } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -417,7 +417,7 @@ export default function SettingsPage() {
               <Brain className="w-4 h-4 text-[var(--text-secondary)]" />
             </div>
             <div className="flex-1">
-              <h2 className="text-lg font-semibold">Local AI Model</h2>
+              <h2 className="text-lg font-semibold">Local AI Companion</h2>
               <p className="text-sm text-[var(--text-secondary)] mt-1" data-tour-id="settings-model-status">
                 Current model: {activeModel || 'No model selected'}
               </p>
@@ -432,17 +432,8 @@ export default function SettingsPage() {
                   onClick={() => setIsModelPanelOpen(true)}
                   className="bg-[var(--accent)] text-white hover:bg-[var(--accent-dark)]"
                 >
-                  <Download className="w-4 h-4 mr-2" />
-                  Download Model
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsModelPanelOpen(true)}
-                  className="border-[rgba(58,74,99,0.16)] text-[var(--text-primary)] hover:bg-[var(--inner)]"
-                >
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Change Model
+                  <Brain className="w-4 h-4 mr-2" />
+                  Choose your companion
                 </Button>
                 <Button
                   type="button"

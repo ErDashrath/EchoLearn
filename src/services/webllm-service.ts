@@ -115,6 +115,7 @@ class WebLLMService {
   private activeModel: string | null = null; // Track the actively loaded model
   private isInitializing = false;
   private loadingModel: WebLLMModel | null = null;
+  private cancelLoadRequested = false;
   private downloadStartTime = 0;
   private lastBytesLoaded = 0;
   private lastProgressTimestamp = 0;
@@ -367,6 +368,52 @@ class WebLLMService {
     this.progressCallback = null;
   }
 
+  async cancelModelLoad(): Promise<void> {
+    if (!this.isInitializing) {
+      return;
+    }
+
+    this.cancelLoadRequested = true;
+    this.progressCallback?.({
+      progress: 0,
+      text: 'Cancelling download...',
+    });
+
+    const engineAny = this.engine as {
+      unload?: () => Promise<void>;
+      dispose?: () => void;
+      interruptGenerate?: () => Promise<void>;
+    } | null;
+
+    if (!engineAny) {
+      return;
+    }
+
+    try {
+      if (typeof engineAny.interruptGenerate === 'function') {
+        await engineAny.interruptGenerate();
+      }
+    } catch {
+      // no-op: some runtimes do not support interrupting model initialization
+    }
+
+    try {
+      if (typeof engineAny.unload === 'function') {
+        await engineAny.unload();
+      }
+    } catch {
+      // no-op: unloading is best-effort while initialization is in-flight
+    }
+
+    try {
+      if (typeof engineAny.dispose === 'function') {
+        engineAny.dispose();
+      }
+    } catch {
+      // no-op
+    }
+  }
+
   setStopCallback(callback: () => void) {
     this.stopCallback = callback;
   }
@@ -616,6 +663,15 @@ class WebLLMService {
       return true;
     }
 
+    if (this.isGenerating) {
+      this.progressCallback?.({
+        progress: 0,
+        text: 'Stopping current response before switching model...',
+      });
+      await this.stopGeneration();
+      await Promise.resolve();
+    }
+
     const model = this.models.find(m => m.id === modelId);
     if (!model) throw new Error(`Model ${modelId} not found`);
 
@@ -623,6 +679,7 @@ class WebLLMService {
     
     try {
       this.isInitializing = true;
+      this.cancelLoadRequested = false;
       this.loadingModel = model;
       this.downloadStartTime = Date.now();
       this.lastBytesLoaded = 0;
@@ -637,10 +694,40 @@ class WebLLMService {
 
       this.engine = new this.webllm.MLCEngine();
       this.engine.setInitProgressCallback((progress: any) => {
+        if (this.cancelLoadRequested) {
+          return;
+        }
         this.handleProgress(progress, isModelCached);
       });
 
       await this.engine.reload(modelId);
+
+      if (this.cancelLoadRequested) {
+        this.progressCallback?.({
+          progress: 0,
+          text: `${model.name} download cancelled`,
+        });
+
+        const engineAny = this.engine as { unload?: () => Promise<void>; dispose?: () => void } | null;
+        try {
+          if (engineAny && typeof engineAny.unload === 'function') {
+            await engineAny.unload();
+          }
+        } catch {
+          // no-op
+        }
+
+        try {
+          if (engineAny && typeof engineAny.dispose === 'function') {
+            engineAny.dispose();
+          }
+        } catch {
+          // no-op
+        }
+
+        this.engine = null;
+        return false;
+      }
 
       this.currentModel = modelId;
       this.activeModel = modelId; // Set as active model
@@ -673,6 +760,7 @@ class WebLLMService {
       return false;
     } finally {
       this.isInitializing = false;
+      this.cancelLoadRequested = false;
       this.loadingModel = null;
       this.lastBytesLoaded = 0;
       this.lastProgressTimestamp = 0;
@@ -761,10 +849,11 @@ class WebLLMService {
     if (this.engine && this.isGenerating) {
       try {
         await this.engine.interruptGenerate();
-        this.isGenerating = false;
-        this.stopCallback?.();
       } catch (error) {
         console.error('Error stopping generation:', error);
+      } finally {
+        this.isGenerating = false;
+        this.stopCallback?.();
       }
     }
   }
