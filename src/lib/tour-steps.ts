@@ -59,15 +59,15 @@ export const GUIDED_TOUR_STEPS: GuidedTourStep[] = [
     id: 'settings',
     title: 'Open Settings',
     description:
-      'Settings is where you manage your local model setup and performance preferences.',
+      'Settings is where you manage your local Companion setup and performance preferences.',
     route: '/',
     targetSelector: '[data-tour-id="nav-settings"]',
   },
   {
     id: 'model-overview',
-    title: 'Local Model Setup',
+    title: 'Local Companion Setup',
     description:
-      'Use Download Model or Change Model here to open the side panel and pick your model. Keep this tab open during download and ensure stable internet. Most models need about 1 to 5 GB of free storage.',
+      'Use Choose your companion here to open the side panel and pick your model. Keep this tab open during download and ensure stable internet. Most models need about 1 to 5 GB of free storage.',
     route: '/settings',
     targetSelector: '[data-tour-id="settings-local-model"]',
   },
