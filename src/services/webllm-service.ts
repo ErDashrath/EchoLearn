@@ -663,6 +663,15 @@ class WebLLMService {
       return true;
     }
 
+    if (this.isGenerating) {
+      this.progressCallback?.({
+        progress: 0,
+        text: 'Stopping current response before switching model...',
+      });
+      await this.stopGeneration();
+      await Promise.resolve();
+    }
+
     const model = this.models.find(m => m.id === modelId);
     if (!model) throw new Error(`Model ${modelId} not found`);
 
@@ -840,10 +849,11 @@ class WebLLMService {
     if (this.engine && this.isGenerating) {
       try {
         await this.engine.interruptGenerate();
-        this.isGenerating = false;
-        this.stopCallback?.();
       } catch (error) {
         console.error('Error stopping generation:', error);
+      } finally {
+        this.isGenerating = false;
+        this.stopCallback?.();
       }
     }
   }
